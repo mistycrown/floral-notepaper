@@ -1,13 +1,29 @@
 import type { TileColorMode } from "./types";
+import chroma from "chroma-js";
 
 export const DEFAULT_TILE_COLOR = "#f6f3ec";
 export const SYSTEM_TILE_COLOR_LIGHT = "#f6f3ec";
 export const SYSTEM_TILE_COLOR_DARK = "#191919";
 
+export const DEFAULT_TILE_COLOR_PRESETS = [
+  "#f6f3ec",
+  "#fff0b3",
+  "#ffd9df",
+  "#d9eddf",
+  "#d7eafa",
+  "#e5ddf5",
+  "#191919",
+  "#2d5a3d",
+  "#284563",
+  "#59374e",
+  "#70472c",
+  "#3e355d",
+] as const;
+
 const FULL_HEX_COLOR = /^#?([0-9a-fA-F]{6})$/;
 const SHORT_HEX_COLOR = /^#?([0-9a-fA-F]{3})$/;
 
-export function normalizeTileColor(value: string | null | undefined): string {
+export function parseHexColor(value: string | null | undefined): string | null {
   const trimmed = value?.trim() ?? "";
   const fullMatch = trimmed.match(FULL_HEX_COLOR);
   if (fullMatch) {
@@ -23,7 +39,18 @@ export function normalizeTileColor(value: string | null | undefined): string {
       .toLowerCase()}`;
   }
 
-  return DEFAULT_TILE_COLOR;
+  return null;
+}
+
+export function normalizeTileColor(value: string | null | undefined): string {
+  return parseHexColor(value) ?? DEFAULT_TILE_COLOR;
+}
+
+export function normalizeTileColorPresets(values?: readonly unknown[] | null): string[] {
+  return DEFAULT_TILE_COLOR_PRESETS.map((fallback, index) => {
+    const value = values?.[index];
+    return typeof value === "string" ? (parseHexColor(value) ?? fallback) : fallback;
+  });
 }
 
 export function resolveSystemTileColor(): string {
@@ -34,4 +61,40 @@ export function resolveSystemTileColor(): string {
 
 export function resolveTileColor(mode: TileColorMode, customColor: string): string {
   return mode === "system" ? resolveSystemTileColor() : normalizeTileColor(customColor);
+}
+
+export function resolveNoteTileColor(noteColor: string | undefined, defaultColor: string): string {
+  return noteColor &&
+    (FULL_HEX_COLOR.test(noteColor.trim()) || SHORT_HEX_COLOR.test(noteColor.trim()))
+    ? normalizeTileColor(noteColor)
+    : defaultColor;
+}
+
+export function tileTextColor(background: string): string {
+  return chroma(normalizeTileColor(background)).luminance() > 0.179 ? "#1a1a18" : "#ffffff";
+}
+
+// Keep the note's hue while moving toward black/white until emphasis is readable.
+// The same RGB calculation runs in NoteStore when the background is saved.
+export function getTileAccentColor(background: string): string {
+  const normalized = normalizeTileColor(background);
+  const rgb = [1, 3, 5].map((offset) => parseInt(normalized.slice(offset, offset + 2), 16));
+  const luminance = (channels: number[]) =>
+    channels.reduce((sum, channel, index) => {
+      const value = channel / 255;
+      const linear = value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4;
+      return sum + linear * [0.2126, 0.7152, 0.0722][index];
+    }, 0);
+  const baseLuminance = luminance(rgb);
+  const target = baseLuminance > 0.179 ? 0 : 255;
+  for (let step = 1; step <= 100; step++) {
+    const candidate = rgb.map((channel) => Math.round(channel + ((target - channel) * step) / 100));
+    const accentLuminance = luminance(candidate);
+    const contrast =
+      (Math.max(baseLuminance, accentLuminance) + 0.05) /
+      (Math.min(baseLuminance, accentLuminance) + 0.05);
+    if (contrast >= 4.5)
+      return `#${candidate.map((channel) => channel.toString(16).padStart(2, "0")).join("")}`;
+  }
+  return target === 0 ? "#000000" : "#ffffff";
 }

@@ -1,7 +1,12 @@
 import { invoke } from "@tauri-apps/api/core";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { checkGlobalShortcut, chooseBackgroundImage } from "../features/settings/api";
+import {
+  checkGlobalShortcut,
+  chooseBackgroundImage,
+  listLocalFonts,
+} from "../features/settings/api";
+import { applyFontFamily, fontFamilyCss } from "../features/settings/fonts";
 import { UpdateSettingsSection } from "../features/update/UpdateSettingsSection";
 import type {
   AppConfig,
@@ -17,10 +22,16 @@ import {
   shortcutPlatform,
 } from "../features/settings/shortcutRecorder";
 import { useShortcutRecorder } from "../features/settings/useShortcutRecorder";
-import { DEFAULT_TILE_COLOR, normalizeTileColor } from "../features/settings/tileColor";
+import {
+  DEFAULT_TILE_COLOR,
+  normalizeTileColor,
+  parseHexColor,
+} from "../features/settings/tileColor";
 import { applyTheme, watchSystemTheme } from "../features/settings/theme";
 import { LOCALE_OPTIONS } from "../locales/locale-whitelist";
 import { SlidingButtonGroup } from "./SlidingButtonGroup";
+import { TileColorPresetsEditor } from "./TileColorPresetsEditor";
+import { HexColorInput } from "./HexColorInput";
 
 const HARMONY_FONT_LICENSE_URL = new URL("../assets/fonts/LICENSE_Fonts", import.meta.url).href;
 
@@ -33,8 +44,48 @@ interface SettingsPanelProps {
 
 export function SettingsPanel({ config, onChange, onMigrateDataDir, onClose }: SettingsPanelProps) {
   const { t } = useTranslation();
+  const [tileColorDraft, setTileColorDraft] = useState(config.tileColor);
+  useEffect(() => {
+    setTileColorDraft(normalizeTileColor(config.tileColor));
+  }, [config.tileColor]);
+  const parsedTileColorDraft = parseHexColor(tileColorDraft);
+  const [localFonts, setLocalFonts] = useState<string[]>([]);
+  const [fontSearch, setFontSearch] = useState("");
+  const [fontLoading, setFontLoading] = useState(true);
+  const [fontError, setFontError] = useState(false);
+  const [fontRefresh, setFontRefresh] = useState(0);
+  useEffect(() => {
+    let cancelled = false;
+    setFontLoading(true);
+    setFontError(false);
+    listLocalFonts()
+      .then((fonts) => {
+        if (!cancelled) setLocalFonts(fonts);
+      })
+      .catch(() => {
+        if (!cancelled) setFontError(true);
+      })
+      .finally(() => {
+        if (!cancelled) setFontLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [fontRefresh]);
+  const visibleFonts = useMemo(() => {
+    const search = fontSearch.trim().toLocaleLowerCase();
+    const fonts = localFonts.filter((font) => font.toLocaleLowerCase().includes(search));
+    if (config.fontFamily && !fonts.includes(config.fontFamily)) fonts.unshift(config.fontFamily);
+    return fonts;
+  }, [localFonts, fontSearch, config.fontFamily]);
   const setConfigValue = <Key extends keyof AppConfig>(key: Key, value: AppConfig[Key]) => {
     onChange({ ...config, [key]: value });
+  };
+  const applyTileColorDraft = () => {
+    if (parsedTileColorDraft) {
+      setConfigValue("tileColor", parsedTileColorDraft);
+      setTileColorDraft(parsedTileColorDraft);
+    }
   };
   const tileColorModes = useMemo<Array<{ value: TileColorMode; label: string }>>(
     () => [
@@ -253,6 +304,59 @@ export function SettingsPanel({ config, onChange, onMigrateDataDir, onClose }: S
         </section>
 
         <section className="space-y-2">
+          <label htmlFor="note-font-family" className="block text-[11px] font-body text-ink-faint">
+            {t("settings.fontFamily.label")}
+          </label>
+          <input
+            type="search"
+            value={fontSearch}
+            onChange={(event) => setFontSearch(event.target.value)}
+            aria-label={t("settings.fontFamily.search")}
+            placeholder={t("settings.fontFamily.search")}
+            className="w-full h-8 px-2.5 rounded-lg bg-paper-warm/70 border border-paper-deep/40 text-[12px] text-ink-soft"
+          />
+          <select
+            id="note-font-family"
+            value={config.fontFamily ?? ""}
+            onChange={(event) => {
+              applyFontFamily(event.target.value);
+              setConfigValue("fontFamily", event.target.value);
+            }}
+            className="w-full h-8 px-2 rounded-lg bg-paper-warm border border-paper-deep/40 text-[12px] text-ink-soft"
+          >
+            <option value="">{t("settings.fontFamily.default")}</option>
+            {visibleFonts.map((font) => (
+              <option key={font} value={font}>
+                {font}
+              </option>
+            ))}
+          </select>
+          <div
+            className="rounded-lg border border-paper-deep/25 bg-paper-warm/45 px-3 py-2 text-[14px] text-ink-soft"
+            style={{ fontFamily: fontFamilyCss(config.fontFamily ?? "") }}
+          >
+            {t("settings.fontFamily.preview")}
+          </div>
+          <div className="flex items-center justify-between gap-2 text-[11px] text-ink-faint">
+            <span role="status">
+              {fontLoading
+                ? t("settings.fontFamily.loading")
+                : fontError
+                  ? t("settings.fontFamily.error")
+                  : t("settings.fontFamily.count", { count: localFonts.length })}
+            </span>
+            <button
+              type="button"
+              disabled={fontLoading}
+              onClick={() => setFontRefresh((value) => value + 1)}
+              className="shrink-0 text-bamboo cursor-pointer disabled:opacity-40"
+            >
+              {t("settings.fontFamily.refresh")}
+            </button>
+          </div>
+        </section>
+
+        <section className="space-y-2">
           <label className="block text-[11px] font-body text-ink-faint">
             {t("settings.fontSize.editor", { defaultValue: "编辑器字号" })}
           </label>
@@ -322,24 +426,27 @@ export function SettingsPanel({ config, onChange, onMigrateDataDir, onClose }: S
             onChange={(v: TileColorMode) => setConfigValue("tileColorMode", v)}
           />
           {config.tileColorMode === "custom" && (
-            <div className="flex items-center gap-2">
-              <input
-                type="color"
-                value={normalizeTileColor(config.tileColor)}
-                onChange={(event) => setConfigValue("tileColor", event.target.value)}
-                className="w-10 h-8 rounded-lg border border-paper-deep/40 bg-paper-warm/70 cursor-pointer"
-              />
-              <input
-                type="text"
-                value={config.tileColor}
-                onChange={(event) => setConfigValue("tileColor", event.target.value)}
-                placeholder="#f6f3ec"
-                spellCheck={false}
-                className="min-w-0 flex-1 h-8 px-2.5 rounded-lg bg-paper-warm/70 border border-paper-deep/40 text-[12px] font-mono text-ink-soft outline-none"
+            <div className="flex items-start gap-2">
+              <HexColorInput
+                value={tileColorDraft}
+                onChange={setTileColorDraft}
+                label={t("settings.tileColor.label")}
+                onApply={applyTileColorDraft}
               />
               <button
                 type="button"
-                onClick={() => setConfigValue("tileColor", DEFAULT_TILE_COLOR)}
+                disabled={!parsedTileColorDraft}
+                onClick={applyTileColorDraft}
+                className="h-8 px-2 shrink-0 rounded bg-bamboo text-cloud text-[11px] cursor-pointer disabled:opacity-40"
+              >
+                {t("noteColor.apply")}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setConfigValue("tileColor", DEFAULT_TILE_COLOR);
+                  setTileColorDraft(DEFAULT_TILE_COLOR);
+                }}
                 className="h-8 px-2.5 rounded-lg border border-paper-deep/45 text-[11px] text-ink-faint hover:text-bamboo hover:bg-bamboo-mist/50 transition-colors cursor-pointer whitespace-nowrap"
               >
                 {t("common.default", { defaultValue: "默认" })}
@@ -347,6 +454,11 @@ export function SettingsPanel({ config, onChange, onMigrateDataDir, onClose }: S
             </div>
           )}
         </section>
+
+        <TileColorPresetsEditor
+          value={config.tileColorPresets}
+          onChange={(presets) => setConfigValue("tileColorPresets", presets)}
+        />
 
         <section className="space-y-2">
           <label className="block text-[11px] font-body text-ink-faint">

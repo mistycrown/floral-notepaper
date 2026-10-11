@@ -42,8 +42,12 @@ pub struct AppConfig {
     pub tile_color: String,
     #[serde(default = "default_tile_color_mode")]
     pub tile_color_mode: String,
+    #[serde(default = "default_tile_color_presets")]
+    pub tile_color_presets: Vec<String>,
     #[serde(default = "default_theme")]
     pub theme: String,
+    #[serde(default)]
+    pub font_family: String,
     #[serde(default = "default_font_size")]
     pub font_size: u32,
     #[serde(default = "default_surface_font_size")]
@@ -116,6 +120,10 @@ pub struct NoteMetadata {
     pub updated_at: DateTime<Utc>,
     pub word_count: usize,
     pub preview: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tile_color: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tile_accent_color: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -130,6 +138,10 @@ pub struct Note {
     pub updated_at: DateTime<Utc>,
     pub word_count: usize,
     pub content: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tile_color: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tile_accent_color: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -718,6 +730,7 @@ impl NoteStore {
         self.migrate_data_dir_if_relocated(&mut config);
         config.data_dir = Some(self.data_dir.to_string_lossy().to_string());
         config.tab_indent_size = config.tab_indent_size.clamp(1, 8);
+        config.tile_color_presets = normalize_tile_color_presets(&config.tile_color_presets);
         write_json_atomic(&path, &config)?;
         fs::create_dir_all(self.data_dir.join("notes"))?;
         if self.migrate_macos_shortcut_default(&mut config)? {
@@ -730,6 +743,7 @@ impl NoteStore {
         self.ensure_config_dir()?;
         config.data_dir = Some(self.data_dir.to_string_lossy().to_string());
         config.tab_indent_size = config.tab_indent_size.clamp(1, 8);
+        config.tile_color_presets = normalize_tile_color_presets(&config.tile_color_presets);
         is_safe_data_dir(&self.data_dir)?;
         fs::create_dir_all(self.data_dir.join("notes"))?;
         write_json_atomic(&self.config_path(), &config)?;
@@ -761,6 +775,8 @@ impl NoteStore {
             created_at: metadata.created_at,
             updated_at: metadata.updated_at,
             word_count: metadata.word_count,
+            tile_color: metadata.tile_color,
+            tile_accent_color: metadata.tile_accent_color,
             content,
         })
     }
@@ -785,6 +801,8 @@ impl NoteStore {
             updated_at: now,
             word_count,
             preview: preview(&request.content),
+            tile_color: None,
+            tile_accent_color: None,
         };
 
         fs::write(&note_path, &request.content)?;
@@ -801,6 +819,8 @@ impl NoteStore {
             updated_at: now,
             word_count,
             content: request.content,
+            tile_color: None,
+            tile_accent_color: None,
         })
     }
 
@@ -845,6 +865,8 @@ impl NoteStore {
             updated_at: note.updated_at,
             word_count: note.word_count,
             content: request.content,
+            tile_color: note.tile_color.clone(),
+            tile_accent_color: note.tile_accent_color.clone(),
         };
 
         self.save_metadata(&metadata_file)?;
@@ -859,6 +881,37 @@ impl NoteStore {
                 let _ = recycle_path(&old_path);
             }
         }
+        Ok(result)
+    }
+
+    pub fn set_note_color(
+        &self,
+        id: &str,
+        color: Option<String>,
+    ) -> Result<NoteMetadata, AppError> {
+        self.ensure_storage()?;
+        let color = color
+            .map(|value| {
+                let value = value.trim();
+                if value.len() != 7
+                    || !value.starts_with('#')
+                    || !value.as_bytes()[1..].iter().all(u8::is_ascii_hexdigit)
+                {
+                    return Err(AppError::new("invalidColor", "Expected a #RRGGBB color"));
+                }
+                Ok(value.to_ascii_lowercase())
+            })
+            .transpose()?;
+        let mut metadata = self.load_metadata()?;
+        let note = metadata
+            .notes
+            .iter_mut()
+            .find(|note| note.id == id)
+            .ok_or_else(|| AppError::note_not_found(id))?;
+        note.tile_accent_color = color.as_deref().map(derive_tile_accent_color);
+        note.tile_color = color;
+        let result = note.clone();
+        self.save_metadata(&metadata)?;
         Ok(result)
     }
 
@@ -1140,7 +1193,9 @@ impl NoteStore {
             note_surface_auto_save: true,
             tile_color: default_tile_color(),
             tile_color_mode: default_tile_color_mode(),
+            tile_color_presets: default_tile_color_presets(),
             theme: default_theme(),
+            font_family: String::new(),
             font_size: default_font_size(),
             surface_font_size: default_surface_font_size(),
             tab_indent_size: default_tab_indent_size(),
@@ -1436,6 +1491,8 @@ impl NoteStore {
                 updated_at: modified,
                 word_count: count_words(&content),
                 preview: preview(&content),
+                tile_color: None,
+                tile_accent_color: None,
             });
         }
         Ok(())
@@ -1680,12 +1737,95 @@ fn default_note_surface_auto_save() -> bool {
     true
 }
 
+// Shared with getTileAccentColor in the frontend for legacy/inherited colors.
+// Blend toward black or white without changing hue, using rounded RGB channels.
+fn derive_tile_accent_color(background: &str) -> String {
+    let channels: [u8; 3] =
+        [1, 3, 5].map(|offset| u8::from_str_radix(&background[offset..offset + 2], 16).unwrap());
+    fn luminance(channels: [u8; 3]) -> f64 {
+        channels
+            .into_iter()
+            .zip([0.2126, 0.7152, 0.0722])
+            .map(|(channel, weight)| {
+                let value = f64::from(channel) / 255.0;
+                let linear = if value <= 0.04045 {
+                    value / 12.92
+                } else {
+                    ((value + 0.055) / 1.055).powf(2.4)
+                };
+                linear * weight
+            })
+            .sum()
+    }
+    let base = luminance(channels);
+    let target = if base > 0.179 { 0.0 } else { 255.0 };
+    for step in 1..=100 {
+        let candidate = channels.map(|channel| {
+            (f64::from(channel) + (target - f64::from(channel)) * f64::from(step) / 100.0).round()
+                as u8
+        });
+        let accent = luminance(candidate);
+        if (base.max(accent) + 0.05) / (base.min(accent) + 0.05) >= 4.5 {
+            return format!(
+                "#{:02x}{:02x}{:02x}",
+                candidate[0], candidate[1], candidate[2]
+            );
+        }
+    }
+    if target == 0.0 {
+        "#000000".into()
+    } else {
+        "#ffffff".into()
+    }
+}
+
 fn default_tile_color() -> String {
     "#f6f3ec".into()
 }
 
 fn default_tile_color_mode() -> String {
     "system".into()
+}
+
+pub fn default_tile_color_presets() -> Vec<String> {
+    [
+        "#f6f3ec", "#fff0b3", "#ffd9df", "#d9eddf", "#d7eafa", "#e5ddf5", "#191919", "#2d5a3d",
+        "#284563", "#59374e", "#70472c", "#3e355d",
+    ]
+    .into_iter()
+    .map(str::to_string)
+    .collect()
+}
+
+fn normalize_hex_color(value: &str) -> Option<String> {
+    let value = value.trim();
+    let digits = value.strip_prefix('#').unwrap_or(value);
+    if !matches!(digits.len(), 3 | 6) || !digits.as_bytes().iter().all(u8::is_ascii_hexdigit) {
+        return None;
+    }
+    let digits = digits.to_ascii_lowercase();
+    let full = if digits.len() == 3 {
+        digits
+            .chars()
+            .map(|character| character.to_string().repeat(2))
+            .collect::<String>()
+    } else {
+        digits
+    };
+    Some(format!("#{full}"))
+}
+
+fn normalize_tile_color_presets(values: &[String]) -> Vec<String> {
+    default_tile_color_presets()
+        .into_iter()
+        .enumerate()
+        .map(|(index, fallback)| {
+            values
+                .get(index)
+                .and_then(|value| normalize_hex_color(value))
+                .unwrap_or(fallback)
+        })
+        .collect()
 }
 
 fn default_theme() -> String {
@@ -1827,6 +1967,91 @@ mod tests {
     }
 
     #[test]
+    fn note_colors_survive_content_saves_moves_and_reload_without_touching_markdown() {
+        let store = test_store("note-colors");
+        let first = store
+            .create_note(SaveNoteRequest {
+                title: "First".into(),
+                content: "Original draft".into(),
+                category: String::new(),
+            })
+            .unwrap();
+        let second = store
+            .create_note(SaveNoteRequest {
+                title: "Second".into(),
+                content: "Independent note".into(),
+                category: String::new(),
+            })
+            .unwrap();
+        let colored = store
+            .set_note_color(&first.id, Some("#2D5A3D".into()))
+            .unwrap();
+        assert_eq!(colored.tile_color.as_deref(), Some("#2d5a3d"));
+        assert_eq!(
+            colored.tile_accent_color,
+            Some(derive_tile_accent_color("#2d5a3d"))
+        );
+        assert_eq!(colored.updated_at, first.updated_at);
+        assert_eq!(
+            store.read_note(&first.id).unwrap().content,
+            "Original draft"
+        );
+        assert_eq!(store.read_note(&second.id).unwrap().tile_color, None);
+        let updated = store
+            .update_note(
+                &first.id,
+                SaveNoteRequest {
+                    title: "Renamed".into(),
+                    content: "Saved draft".into(),
+                    category: String::new(),
+                },
+            )
+            .unwrap();
+        assert_eq!(updated.tile_color.as_deref(), Some("#2d5a3d"));
+        assert_eq!(updated.tile_accent_color, colored.tile_accent_color);
+        store.create_category("Work").unwrap();
+        store.move_note_to_category(&first.id, "Work").unwrap();
+        let reloaded = NoteStore::new(store.config_dir.clone(), store.data_dir.clone());
+        let note = reloaded.read_note(&first.id).unwrap();
+        assert_eq!(note.tile_color.as_deref(), Some("#2d5a3d"));
+        assert_eq!(note.tile_accent_color, colored.tile_accent_color);
+        assert_eq!(note.category, "Work");
+        assert_eq!(note.content, "Saved draft");
+        assert!(store
+            .set_note_color(&first.id, Some("#badxyz".into()))
+            .is_err());
+        assert!(store
+            .set_note_color(&first.id, Some("url(file)".into()))
+            .is_err());
+        assert_eq!(
+            store.read_note(&first.id).unwrap().tile_color,
+            note.tile_color
+        );
+        store.set_note_color(&first.id, None).unwrap();
+        assert_eq!(reloaded.read_note(&first.id).unwrap().tile_color, None);
+        assert_eq!(
+            reloaded.read_note(&first.id).unwrap().tile_accent_color,
+            None
+        );
+    }
+
+    #[test]
+    fn legacy_metadata_inherits_the_default_note_color() {
+        let store = test_store("legacy-note-color");
+        let note = store
+            .create_note(SaveNoteRequest {
+                title: "Legacy".into(),
+                content: "Hello".into(),
+                category: String::new(),
+            })
+            .unwrap();
+        let json = serde_json::to_value(store.list_notes().unwrap()).unwrap();
+        assert!(json[0].get("tileColor").is_none());
+        assert!(json[0].get("tileAccentColor").is_none());
+        assert_eq!(store.read_note(&note.id).unwrap().tile_color, None);
+    }
+
+    #[test]
     fn rebuilds_metadata_when_metadata_json_is_corrupt() {
         let store = test_store("repair");
         let first = store
@@ -1885,6 +2110,7 @@ mod tests {
         assert!(!default_config.tile_double_click_to_edit);
         assert!(!default_config.tile_save_returns_to_pin);
         assert_eq!(default_config.theme, "system");
+        assert_eq!(default_config.font_family, "");
         assert_eq!(default_config.locale, "zh-CN");
         assert_eq!(
             default_config.data_dir.as_deref(),
@@ -1902,7 +2128,9 @@ mod tests {
             note_surface_auto_save: false,
             tile_color: "#efe8dc".into(),
             tile_color_mode: "custom".into(),
+            tile_color_presets: default_tile_color_presets(),
             theme: "dark".into(),
+            font_family: "Microsoft YaHei".into(),
             font_size: 16,
             surface_font_size: 16,
             tab_indent_size: 2,
@@ -1934,6 +2162,65 @@ mod tests {
         let loaded = store.load_config().expect("reload config");
         saved.data_dir = Some(store.data_dir().to_string_lossy().to_string());
         assert_eq!(loaded, saved);
+    }
+
+    #[test]
+    fn edited_quick_colors_persist_by_slot_without_recoloring_notes() {
+        let store = test_store("color-presets");
+        let note = store
+            .create_note(SaveNoteRequest {
+                title: "Pinned note".into(),
+                content: "Keep this content".into(),
+                category: String::new(),
+            })
+            .unwrap();
+        store
+            .set_note_color(&note.id, Some("#284563".into()))
+            .unwrap();
+        let before = store.read_note(&note.id).unwrap();
+        let mut config = store.load_config().unwrap();
+        config.tile_color_presets = vec![
+            "#AbC".into(),
+            "#ABC".into(),
+            "bad-color".into(),
+            " #112233 ".into(),
+        ];
+        let saved = store.save_config(config).unwrap();
+        assert_eq!(saved.tile_color_presets.len(), 12);
+        assert_eq!(
+            &saved.tile_color_presets[..4],
+            &["#aabbcc", "#aabbcc", "#ffd9df", "#112233"]
+        );
+        let restarted = NoteStore::new(store.config_dir.clone(), store.data_dir.clone());
+        assert_eq!(
+            restarted.load_config().unwrap().tile_color_presets,
+            saved.tile_color_presets
+        );
+        assert_eq!(restarted.read_note(&note.id).unwrap(), before);
+        let mut restored = saved;
+        restored.tile_color_presets = default_tile_color_presets();
+        store.save_config(restored).unwrap();
+        assert_eq!(
+            restarted.load_config().unwrap().tile_color_presets,
+            default_tile_color_presets()
+        );
+        assert_eq!(restarted.read_note(&note.id).unwrap(), before);
+    }
+
+    #[test]
+    fn repairs_incomplete_palettes_on_load_without_shifting_slots() {
+        let store = test_store("partial-palette");
+        let mut config = store.default_config();
+        config.tile_color_presets = vec!["#12".into(), "0fA".into()];
+        write_json_atomic(&store.config_path(), &config).unwrap();
+        let loaded = store.load_config().unwrap();
+        assert_eq!(loaded.tile_color_presets.len(), 12);
+        assert_eq!(loaded.tile_color_presets[0], "#f6f3ec");
+        assert_eq!(loaded.tile_color_presets[1], "#00ffaa");
+        assert_eq!(
+            loaded.tile_color_presets[2..],
+            default_tile_color_presets()[2..]
+        );
     }
 
     #[test]
@@ -1978,11 +2265,13 @@ mod tests {
         .expect("write legacy config");
 
         let loaded = store.load_config().expect("load legacy config");
+        assert_eq!(loaded.font_family, "");
 
         assert!(loaded.note_auto_save);
         assert!(loaded.note_surface_auto_save);
         assert_eq!(loaded.tile_color, "#f6f3ec");
         assert_eq!(loaded.tile_color_mode, "system");
+        assert_eq!(loaded.tile_color_presets, default_tile_color_presets());
         assert!(!loaded.tile_double_click_to_edit);
         assert!(!loaded.tile_save_returns_to_pin);
         assert_eq!(loaded.theme, "system");

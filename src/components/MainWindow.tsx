@@ -15,7 +15,8 @@ import { emit, listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { exportMarkdownNote, importMarkdownNote } from "../features/importExport/api";
 import { MarkdownPreviewLazy as MarkdownPreview } from "../features/markdown/MarkdownPreviewLazy";
-import { toggleMarkdownTask } from "../features/markdown/taskLists";
+import { taskListInsertion, toggleMarkdownTask } from "../features/markdown/taskLists";
+import { handleListEnter } from "../features/markdown/listContinuation";
 import { showToast } from "./Toast";
 import {
   createScrollSyncMap,
@@ -33,7 +34,8 @@ import {
   saveConfig,
 } from "../features/settings/api";
 import type { AppConfig, ViewMode } from "../features/settings/types";
-import { normalizeTileColor } from "../features/settings/tileColor";
+import { normalizeTileColor, resolveTileColor } from "../features/settings/tileColor";
+import { NoteColorPicker } from "./NoteColorPicker";
 import { getUpdateStatus, reportInstallPreparation } from "../features/update/api";
 import {
   ABOUT_UPDATE_LABEL_DURATION_MS,
@@ -127,6 +129,7 @@ type FormatAction =
   | "italic"
   | "heading"
   | "hr"
+  | "task"
   | "ul"
   | "ol"
   | "code"
@@ -203,6 +206,12 @@ function applyFormat(
       const newlineAfter = after.startsWith("\n") || after === "" ? "" : "\n";
       result = before + `${newlineBefore}---${newlineAfter}` + after;
       cursorStart = cursorEnd = before.length + newlineBefore.length + 3;
+      break;
+    }
+    case "task": {
+      const insertion = taskListInsertion(value, start, end);
+      result = insertion.value;
+      cursorStart = cursorEnd = insertion.cursor;
       break;
     }
     case "ul": {
@@ -386,6 +395,8 @@ export function MainWindow({
   const [showCategoryInput, setShowCategoryInput] = useState(false);
   const [categoryInputValue, setCategoryInputValue] = useState("");
   const [noteMenuMode, setNoteMenuMode] = useState<"main" | "move">("main");
+  const [colorNoteId, setColorNoteId] = useState<string | null>(null);
+  const closeColorPicker = useCallback(() => setColorNoteId(null), []);
   const [renamingCategory, setRenamingCategory] = useState<string | null>(null);
   const [renameCategoryValue, setRenameCategoryValue] = useState("");
   const [dragOverCategory, setDragOverCategory] = useState<string | null>(null);
@@ -507,6 +518,12 @@ export function MainWindow({
         title: t("main.toolbar.hr", { defaultValue: "分割线" }),
         style: "",
         action: "hr",
+      },
+      {
+        label: "☑",
+        title: t("main.toolbar.task", { defaultValue: "待办列表" }),
+        style: "",
+        action: "task",
       },
       {
         label: "•",
@@ -1516,6 +1533,12 @@ export function MainWindow({
   const handleNoteMenuAction = (action: NoteContextMenuAction) => {
     const note = noteMenuTarget;
     if (!note) return;
+
+    if (action === "color") {
+      setNoteMenuClosing(true);
+      setColorNoteId(note.id);
+      return;
+    }
 
     if (action === "export") {
       setNoteMenuClosing(true);
@@ -2949,6 +2972,7 @@ export function MainWindow({
                           <button
                             key={button.label}
                             title={button.title}
+                            aria-label={button.title}
                             onMouseDown={(e) => e.preventDefault()}
                             onClick={() => {
                               if (contentRef.current) {
@@ -2963,7 +2987,24 @@ export function MainWindow({
                             }}
                             className={`w-6 h-6 flex items-center justify-center rounded text-[11px] text-ink-ghost hover:text-ink-faint hover:bg-paper-warm transition-all cursor-pointer ${button.style}`}
                           >
-                            {button.label}
+                            {button.action === "task" ? (
+                              <svg
+                                aria-hidden="true"
+                                width="13"
+                                height="13"
+                                viewBox="0 0 24 24"
+                                fill="none"
+                                stroke="currentColor"
+                                strokeWidth="2"
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                              >
+                                <rect x="3" y="3" width="18" height="18" rx="3" />
+                                <path d="m7 12 3 3 7-7" />
+                              </svg>
+                            ) : (
+                              button.label
+                            )}
                           </button>
                         ))}
                       </div>
@@ -2980,6 +3021,7 @@ export function MainWindow({
                           onPaste={imagePasteHandler}
                           onDrop={imageDropHandler}
                           onDragOver={imageDragOverHandler}
+                          onKeyDown={(event) => handleListEnter(event, setContent, markDirty)}
                           onScroll={handleEditorScroll}
                           className="w-full h-full leading-[1.9] text-ink-soft font-body placeholder:text-ink-ghost/40"
                           style={{
@@ -3210,6 +3252,20 @@ export function MainWindow({
             </div>
           )}
         </div>
+      )}
+
+      {colorNoteId && (
+        <NoteColorPicker
+          key={colorNoteId}
+          noteId={colorNoteId}
+          color={notes.find((note) => note.id === colorNoteId)?.tileColor}
+          presets={settingsConfig?.tileColorPresets}
+          defaultColor={resolveTileColor(
+            settingsConfig?.tileColorMode ?? "system",
+            settingsConfig?.tileColor ?? "#f6f3ec",
+          )}
+          onClose={closeColorPicker}
+        />
       )}
 
       {categoryMenu && (

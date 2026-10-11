@@ -273,6 +273,12 @@ export function ContextMenuProvider({ children }: { children: React.ReactNode })
                 : []),
               ...(menu.padMode
                 ? [
+                    {
+                      label: t("noteColor.title"),
+                      shortcut: "",
+                      action: () => runSurfaceAction("color"),
+                      disabled: false,
+                    },
                     ...(menu.type === "edit" ? [{ separator: true as const }] : []),
                     {
                       label:

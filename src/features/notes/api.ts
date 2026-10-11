@@ -43,6 +43,10 @@ export function deleteNote(id: string): Promise<void> {
   return invoke("notes_delete", { id });
 }
 
+export function setNoteColor(id: string, color: string | null): Promise<NoteMetadata> {
+  return invoke("notes_set_color", { id, color });
+}
+
 export function moveNoteCategory(id: string, category: string): Promise<NoteMetadata> {
   return invoke("notes_move_category", { id, category });
 }

@@ -1,6 +1,7 @@
 pub mod desktop;
 mod edge_hide;
 mod edge_hide_geometry;
+pub mod fonts;
 pub mod json_io;
 pub mod locales;
 pub mod services;
@@ -25,6 +26,25 @@ fn notes_list() -> Result<Vec<NoteMetadata>, AppError> {
 #[tauri::command]
 fn notes_get(id: String) -> Result<Note, AppError> {
     default_store()?.read_note(&id)
+}
+
+#[tauri::command]
+async fn fonts_list() -> Result<Vec<String>, String> {
+    tauri::async_runtime::spawn_blocking(fonts::list_font_families)
+        .await
+        .map_err(|error| error.to_string())?
+}
+
+#[tauri::command]
+fn notes_set_color(
+    app: AppHandle,
+    id: String,
+    color: Option<String>,
+) -> Result<NoteMetadata, AppError> {
+    let note = default_store()?.set_note_color(&id, color)?;
+    let _ = app.emit("note-color-changed", &note);
+    let _ = app.emit("notes-changed", ());
+    Ok(note)
 }
 
 #[tauri::command]
@@ -472,6 +492,8 @@ pub fn run() {
         })
         .on_window_event(desktop::handle_window_event)
         .invoke_handler(tauri::generate_handler![
+            fonts_list,
+            notes_set_color,
             edge_hide::set_tile_edge_hide,
             app_name,
             notes_list,

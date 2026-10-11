@@ -2,7 +2,13 @@ import chroma from "chroma-js";
 import type { CSSProperties, HTMLAttributes } from "react";
 import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
-import { DEFAULT_TILE_COLOR, normalizeTileColor } from "../features/settings/tileColor";
+import {
+  DEFAULT_TILE_COLOR,
+  normalizeTileColor,
+  tileTextColor,
+  getTileAccentColor,
+  resolveNoteTileColor,
+} from "../features/settings/tileColor";
 import { MarkdownPreviewLazy as MarkdownPreview } from "../features/markdown/MarkdownPreviewLazy";
 
 export interface TileProps extends Omit<
@@ -12,6 +18,7 @@ export interface TileProps extends Omit<
   title?: string;
   content: string;
   color?: string;
+  accentColor?: string;
   width?: number | string;
   rotation?: number;
   fontSize?: number;
@@ -74,6 +81,7 @@ export function Tile({
   title,
   content,
   color = DEFAULT_TILE_COLOR,
+  accentColor,
   width = 260,
   rotation = 0,
   fontSize = 14,
@@ -88,20 +96,39 @@ export function Tile({
 }: TileProps) {
   const { t } = useTranslation();
   const tileColor = normalizeTileColor(color);
+  const noteAccentColor = useMemo(
+    () => resolveNoteTileColor(accentColor, getTileAccentColor(tileColor)),
+    [accentColor, tileColor],
+  );
   const { borderColor, cornerColor, titleColor, contentColor, emptyColor } = useMemo(() => {
-    const isLightBg = chroma(tileColor).luminance() > 0.18;
-    const mixTarget = isLightBg ? "#1a1a18" : "#ffffff";
+    const mixTarget = tileTextColor(tileColor);
     return {
       borderColor: chroma.mix(tileColor, mixTarget, 0.18).alpha(0.55).css(),
       cornerColor: chroma.mix(tileColor, mixTarget, 0.3).alpha(0.26).css(),
-      titleColor: chroma.mix(tileColor, mixTarget, 0.4).alpha(0.5).css(),
-      contentColor: chroma.mix(tileColor, mixTarget, 0.65).alpha(0.85).css(),
-      emptyColor: chroma.mix(tileColor, mixTarget, 0.25).alpha(0.4).css(),
+      titleColor: mixTarget,
+      contentColor: mixTarget,
+      emptyColor: mixTarget,
     };
   }, [tileColor]);
   const mergedStyle: CSSProperties = {
     width,
     backgroundColor: tileColor,
+    color: contentColor,
+    // Markdown and controls derive their palette from this note, independently
+    // of the global application theme. This includes code blocks and tables.
+    ...({
+      "--color-ink": contentColor,
+      "--note-accent-color": noteAccentColor,
+      "--note-accent-text-color": tileTextColor(noteAccentColor),
+      "--color-ink-soft": contentColor,
+      "--color-ink-faint": chroma(contentColor).alpha(0.7).css(),
+      "--color-ink-ghost": chroma(contentColor).alpha(0.55).css(),
+      "--color-bamboo": contentColor,
+      "--color-bamboo-light": contentColor,
+      "--color-paper": tileColor,
+      "--color-paper-warm": chroma.mix(tileColor, contentColor, 0.08).hex(),
+      "--color-paper-deep": chroma.mix(tileColor, contentColor, 0.2).hex(),
+    } as CSSProperties),
     borderColor,
     transition: "box-shadow 0.3s ease",
     ...(rotation ? { transform: `rotate(${rotation}deg)` } : {}),
@@ -111,6 +138,7 @@ export function Tile({
   return (
     <div
       {...divProps}
+      data-note-tile="true"
       className={`app-surface-frame relative border overflow-hidden shadow-[0_1px_8px_rgba(26,26,24,0.04)] hover:shadow-[0_6px_24px_rgba(26,26,24,0.07)] ${className}`}
       style={mergedStyle}
     >

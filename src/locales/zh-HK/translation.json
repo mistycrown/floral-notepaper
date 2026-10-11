@@ -1,4 +1,16 @@
 {
+  "noteColor": {
+    "hexLabel": "十六進制色值",
+    "invalidHex": "請輸入 #RRGGBB 或 #RGB 格式的有效色值",
+    "title": "便箋顏色",
+    "custom": "自訂顏色",
+    "apply": "套用",
+    "reset": "恢復預設顏色",
+    "hint": "只改變這張便箋的桌面顏色，深色背景自動使用白字。",
+    "preview": "便箋預覽 Aa 123",
+    "saving": "正在儲存…",
+    "close": "關閉顏色設定"
+  },
   "about": {
     "closeTitle": "關閉關於",
     "contributors": "貢獻者",
@@ -148,6 +160,7 @@
       "italic": "斜體",
       "ol": "有序清單",
       "quote": "引用",
+      "task": "待辦清單",
       "ul": "無序清單"
     },
     "window": {
@@ -204,6 +217,22 @@
     }
   },
   "settings": {
+    "tileColorPresets": {
+      "label": "便箋快捷色格",
+      "slot": "色格 {{index}}",
+      "reset": "恢復預設色格",
+      "hint": "點選色格後編輯顏色，套用後儲存；修改不會改變已設定的便箋顏色。"
+    },
+    "fontFamily": {
+      "label": "字體",
+      "search": "搜尋本機字體",
+      "default": "預設字體",
+      "preview": "花箋 · 記錄生活的點滴 Aa 123",
+      "loading": "正在讀取本機字體…",
+      "error": "讀取字體失敗，請重試",
+      "count": "已讀取 {{count}} 個字體族",
+      "refresh": "重新整理"
+    },
     "autoSave": {
       "externalFile": "外部檔案自動儲存",
       "note": "自動儲存筆記",

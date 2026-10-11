@@ -1,4 +1,16 @@
 {
+  "noteColor": {
+    "hexLabel": "Hex color",
+    "invalidHex": "Enter a valid #RRGGBB or #RGB color",
+    "title": "Note color",
+    "custom": "Custom color",
+    "apply": "Apply",
+    "reset": "Reset to default color",
+    "hint": "Change this desktop note's color. Dark backgrounds automatically use white text.",
+    "preview": "Note preview Aa 123",
+    "saving": "Saving…",
+    "close": "Close color settings"
+  },
   "about": {
     "closeTitle": "Close About",
     "contributors": "Contributors",
@@ -148,6 +160,7 @@
       "italic": "Italic",
       "ol": "Ordered list",
       "quote": "Blockquote",
+      "task": "Task list",
       "ul": "Unordered list"
     },
     "window": {
@@ -204,6 +217,22 @@
     }
   },
   "settings": {
+    "tileColorPresets": {
+      "label": "Note quick colors",
+      "slot": "Color slot {{index}}",
+      "reset": "Restore default palette",
+      "hint": "Select a slot, edit its color, then apply to save. Existing note colors stay the same."
+    },
+    "fontFamily": {
+      "label": "Font family",
+      "search": "Search installed fonts",
+      "default": "Default font",
+      "preview": "Floral Notepaper · Capture everyday moments Aa 123",
+      "loading": "Loading installed fonts…",
+      "error": "Could not load fonts. Please retry.",
+      "count": "{{count}} font families available",
+      "refresh": "Refresh"
+    },
     "autoSave": {
       "externalFile": "Auto-save external files",
       "note": "Auto-save notes",

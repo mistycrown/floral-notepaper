@@ -7,6 +7,8 @@ export interface NoteMetadata {
   updatedAt: string;
   wordCount: number;
   preview: string;
+  tileColor?: string;
+  tileAccentColor?: string;
 }
 
 export interface Note extends Omit<NoteMetadata, "preview"> {

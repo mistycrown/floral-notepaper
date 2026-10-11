@@ -11,6 +11,7 @@ import { showToast } from "./Toast";
 import type { Note, NoteMetadata } from "../features/notes/types";
 import { metadataFromNote } from "../features/notes/noteUtils";
 import { toggleMarkdownTask } from "../features/markdown/taskLists";
+import { handleListEnter } from "../features/markdown/listContinuation";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import {
@@ -30,6 +31,8 @@ import {
   DEFAULT_TILE_COLOR,
   normalizeTileColor,
   resolveTileColor,
+  resolveNoteTileColor,
+  normalizeTileColorPresets,
 } from "../features/settings/tileColor";
 import type { TileColorMode } from "../features/settings/types";
 import {
@@ -52,6 +55,7 @@ import {
 } from "../features/windows/tileWindowEvents";
 import { NotepadOpenPanel } from "./NotepadOpenPanel";
 import { Tile } from "./Tile";
+import { NoteColorPicker } from "./NoteColorPicker";
 import { setTileEdgeHide } from "../features/windows/tileEdgeHide";
 import { useTileEdgeHide } from "../features/windows/useTileEdgeHide";
 
@@ -139,6 +143,7 @@ export function NotePad({
   const [noteSurfaceAutoSave, setNoteSurfaceAutoSave] = useState(initialAutoSave);
   const [tileColorRaw, setTileColorRaw] = useState(normalizeTileColor(initialTileColor));
   const [tileColorMode, setTileColorMode] = useState<TileColorMode>("system");
+  const [tileColorPresets, setTileColorPresets] = useState(() => normalizeTileColorPresets());
   const [surfaceFontSize, setSurfaceFontSize] = useState(14);
   const [tileRenderMarkdown, setTileRenderMarkdown] = useState(false);
   const [tileDoubleClickToEdit, setTileDoubleClickToEdit] = useState(false);
@@ -148,6 +153,10 @@ export function NotePad({
   );
   const [isExiting, setIsExiting] = useState(false);
   const [tileContentCopied, setTileContentCopied] = useState(false);
+  const [noteTileColor, setNoteTileColor] = useState<string | undefined>();
+  const [noteTileAccentColor, setNoteTileAccentColor] = useState<string | undefined>();
+  const [colorPickerOpen, setColorPickerOpen] = useState(false);
+  const closeColorPicker = useCallback(() => setColorPickerOpen(false), []);
   const titleRef = useRef<HTMLInputElement>(null);
   const contentRef = useRef<HTMLTextAreaElement>(null);
   const tileDragIntentRef = useRef<{ x: number; y: number } | null>(null);
@@ -197,6 +206,9 @@ export function NotePad({
   }, []);
 
   const applyNote = useCallback((note: Note) => {
+    setNoteTileColor(note.tileColor);
+    setNoteTileAccentColor(note.tileAccentColor);
+    setColorPickerOpen(false);
     editingNoteIdRef.current = note.id;
     titleValueRef.current = note.title;
     contentValueRef.current = note.content;
@@ -221,6 +233,7 @@ export function NotePad({
           setTileSaveReturnsToPin(loadedConfig.tileSaveReturnsToPin ?? false);
           setTileColorRaw(normalizeTileColor(loadedConfig.tileColor));
           setTileColorMode(loadedConfig.tileColorMode ?? "system");
+          setTileColorPresets(normalizeTileColorPresets(loadedConfig.tileColorPresets));
           setTileColor(
             resolveTileColor(loadedConfig.tileColorMode ?? "system", loadedConfig.tileColor),
           );
@@ -250,6 +263,29 @@ export function NotePad({
   }, [refreshNotes]);
 
   useEffect(() => {
+    const unlisten = listen<NoteMetadata>("note-color-changed", (event) => {
+      if (event.payload.id === editingNoteIdRef.current) {
+        setNoteTileColor(event.payload.tileColor);
+        setNoteTileAccentColor(event.payload.tileAccentColor);
+      }
+      setNotes((current) =>
+        current.map((note) =>
+          note.id === event.payload.id
+            ? {
+                ...note,
+                tileColor: event.payload.tileColor,
+                tileAccentColor: event.payload.tileAccentColor,
+              }
+            : note,
+        ),
+      );
+    });
+    return () => {
+      void unlisten.then((fn) => fn());
+    };
+  }, []);
+
+  useEffect(() => {
     if (isStandby.current) return;
     let cancelled = false;
     requestAnimationFrame(() => {
@@ -271,6 +307,7 @@ export function NotePad({
     const unlisten = listen<{
       tileColor?: string;
       tileColorMode?: TileColorMode;
+      tileColorPresets?: string[];
       surfaceFontSize?: number;
       tileRenderMarkdown?: boolean;
       tileDoubleClickToEdit?: boolean;
@@ -281,6 +318,8 @@ export function NotePad({
       setTileColorMode(mode);
       setTileColorRaw(normalizeTileColor(raw));
       setTileColor(resolveTileColor(mode, raw));
+      if (event.payload.tileColorPresets != null)
+        setTileColorPresets(normalizeTileColorPresets(event.payload.tileColorPresets));
       if (event.payload.surfaceFontSize != null) setSurfaceFontSize(event.payload.surfaceFontSize);
       if (event.payload.tileRenderMarkdown != null)
         setTileRenderMarkdown(event.payload.tileRenderMarkdown);
@@ -322,6 +361,9 @@ export function NotePad({
       dormantRef.current = false;
       hasEnteredOnce.current = true;
       setEditingNoteId(null);
+      setNoteTileColor(undefined);
+      setNoteTileAccentColor(undefined);
+      setColorPickerOpen(false);
       setTitle("");
       setContent("");
       setMode("new");
@@ -636,6 +678,9 @@ export function NotePad({
       dormantRef.current = true;
       await recycleCurrentNotepad();
       setEditingNoteId(null);
+      setNoteTileColor(undefined);
+      setNoteTileAccentColor(undefined);
+      setColorPickerOpen(false);
       setTitle("");
       setContent("");
       setNotes([]);
@@ -703,6 +748,15 @@ export function NotePad({
         return;
       }
 
+      if (action === "color") {
+        const openPicker = async () => {
+          if (!editingNoteIdRef.current) await saveNoteRef.current();
+          setColorPickerOpen(true);
+        };
+        void openPicker().catch((error) => showToast(getErrorMessage(error)));
+        return;
+      }
+
       if (action === "close") {
         void handleCloseRef.current();
         return;
@@ -764,11 +818,22 @@ export function NotePad({
 
   return (
     <div className={surfaceWrapperClassName}>
+      {colorPickerOpen && editingNoteId && (
+        <NoteColorPicker
+          key={editingNoteId}
+          noteId={editingNoteId}
+          color={noteTileColor}
+          presets={tileColorPresets}
+          defaultColor={tileColor}
+          onClose={closeColorPicker}
+        />
+      )}
       {isTile ? (
         <Tile
           title={tileTitle || undefined}
           content={content}
-          color={tileColor}
+          color={resolveNoteTileColor(noteTileColor, tileColor)}
+          accentColor={noteTileAccentColor}
           fontSize={surfaceFontSize}
           renderMarkdown={
             tileRenderMarkdown ||
@@ -948,6 +1013,7 @@ export function NotePad({
                   onDrop={imageDropHandler}
                   onDragOver={imageDragOverHandler}
                   onKeyDown={(event) => {
+                    if (handleListEnter(event, setContent, () => setStatus("dirty"))) return;
                     if (event.key === "ArrowUp") {
                       const ta = contentRef.current;
                       if (ta && ta.selectionStart === ta.selectionEnd) {

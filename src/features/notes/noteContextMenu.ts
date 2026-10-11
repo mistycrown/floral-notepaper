@@ -1,6 +1,6 @@
 import { t, type TFunction } from "i18next";
 
-export type NoteContextMenuAction = "export" | "move" | "delete";
+export type NoteContextMenuAction = "export" | "move" | "color" | "delete";
 
 export interface NoteContextMenuItem {
   action: NoteContextMenuAction;
@@ -10,6 +10,7 @@ export interface NoteContextMenuItem {
 
 export function getNoteContextMenuItems(translate: TFunction = t): NoteContextMenuItem[] {
   return [
+    { action: "color", label: translate("noteColor.title") },
     {
       action: "export",
       label: translate("noteMenu.export", { defaultValue: "导出 Markdown" }),

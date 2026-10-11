@@ -1,4 +1,16 @@
 {
+  "noteColor": {
+    "hexLabel": "十六进制色值",
+    "invalidHex": "请输入 #RRGGBB 或 #RGB 格式的有效色值",
+    "title": "便签颜色",
+    "custom": "自定义颜色",
+    "apply": "应用",
+    "reset": "恢复默认颜色",
+    "hint": "只改变这张便签的桌面颜色，深色背景自动使用白字。",
+    "preview": "便签预览 Aa 123",
+    "saving": "正在保存…",
+    "close": "关闭颜色设置"
+  },
   "about": {
     "closeTitle": "关闭关于",
     "contributors": "贡献者",
@@ -148,6 +160,7 @@
       "italic": "斜体",
       "ol": "有序列表",
       "quote": "引用",
+      "task": "待办列表",
       "ul": "无序列表"
     },
     "window": {
@@ -204,6 +217,22 @@
     }
   },
   "settings": {
+    "tileColorPresets": {
+      "label": "便签快捷色格",
+      "slot": "色格 {{index}}",
+      "reset": "恢复默认色格",
+      "hint": "点击色格后编辑颜色，应用后保存；修改不会改变已设置的便签颜色。"
+    },
+    "fontFamily": {
+      "label": "字体",
+      "search": "搜索本机字体",
+      "default": "默认字体",
+      "preview": "花笺 · 记录生活的点滴 Aa 123",
+      "loading": "正在读取本机字体…",
+      "error": "读取字体失败，请重试",
+      "count": "已读取 {{count}} 个字体族",
+      "refresh": "刷新"
+    },
     "autoSave": {
       "externalFile": "外部文件自动保存",
       "note": "自动保存笔记",

@@ -57,6 +57,11 @@
   --app-surface-radius: 14px;
 }
 
+/* Semantic Markdown alerts retain their icon/border while using readable note ink. */
+[data-note-tile] .markdown-alert .markdown-alert-title {
+  color: var(--color-ink);
+}
+
 :root[data-theme="dark"] {
   --color-paper: #222120;
   --color-paper-warm: #2c2a27;
@@ -286,6 +291,59 @@ input::placeholder {
 .markdown-selectable svg {
   -webkit-user-select: none;
   user-select: none;
+}
+
+.markdown-selectable .task-list-item {
+  position: relative;
+}
+
+/* The inline slot follows the text baseline, including loose/nested lists. */
+.markdown-selectable .task-list-item > .markdown-task-marker,
+.markdown-selectable .task-list-item > p > .markdown-task-marker {
+  position: relative;
+  display: inline-block;
+  vertical-align: middle;
+  width: 0;
+  height: 0.9em;
+}
+
+.markdown-selectable .markdown-task-marker > input[type="checkbox"] {
+  appearance: none;
+  -webkit-appearance: none;
+  position: absolute;
+  right: 0.35em;
+  top: 0;
+  width: 0.9em;
+  height: 0.9em;
+  margin: 0;
+  border: 1px solid var(--note-accent-color, var(--color-bamboo));
+  border-radius: 0.15em;
+  background: transparent;
+}
+
+.markdown-selectable .markdown-task-marker > input[type="checkbox"]:checked {
+  background: var(--note-accent-color, var(--color-bamboo));
+}
+
+.markdown-selectable .markdown-task-marker > input[type="checkbox"]:checked::after {
+  content: "";
+  position: absolute;
+  left: 0.23em;
+  top: 0.09em;
+  width: 0.25em;
+  height: 0.45em;
+  border: solid var(--note-accent-text-color, #fff);
+  border-width: 0 0.12em 0.12em 0;
+  transform: rotate(45deg);
+}
+
+.markdown-selectable .markdown-task-marker > input[type="checkbox"]:focus-visible {
+  outline: 2px solid var(--note-accent-color, var(--color-bamboo));
+  outline-offset: 2px;
+}
+
+[data-note-tile="true"] .markdown-selectable strong {
+  color: var(--note-accent-color);
 }
 
 /* Noise texture overlay for paper feel */

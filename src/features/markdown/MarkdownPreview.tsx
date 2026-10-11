@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo } from "react";
+import { useState, useCallback, useMemo, Children, isValidElement, cloneElement } from "react";
 import { useTranslation } from "react-i18next";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -174,6 +174,30 @@ function Blockquote({
   );
 }
 
+// GFM emits a separating space after the checkbox. The zero-width marker slot
+// already supplies its gap, so remove that space to align task and list text.
+function taskItemChildren(children: React.ReactNode): React.ReactNode {
+  let afterCheckbox = false;
+  return Children.map(children, (child) => {
+    if (
+      isValidElement<{ type?: string; node?: { tagName?: string }; children?: React.ReactNode }>(
+        child,
+      )
+    ) {
+      if (child.props.type === "checkbox") afterCheckbox = true;
+      if (child.props.node?.tagName === "p") {
+        return cloneElement(child, {}, taskItemChildren(child.props.children));
+      }
+      return child;
+    }
+    if (afterCheckbox && typeof child === "string") {
+      afterCheckbox = false;
+      return child.replace(/^ /, "");
+    }
+    return child;
+  });
+}
+
 const staticComponents: Components = {
   h1: ({ children, id }) => (
     <h1 id={id} className="text-[1.57em] font-display font-bold text-ink mt-6 mb-4 tracking-wide">
@@ -216,7 +240,7 @@ const staticComponents: Components = {
         className?.split(/\s+/).includes("task-list-item") ? "list-none" : ""
       }`}
     >
-      {children}
+      {className?.split(/\s+/).includes("task-list-item") ? taskItemChildren(children) : children}
     </li>
   ),
   hr: () => (
@@ -299,19 +323,22 @@ export function MarkdownPreview({
     () => ({
       ...staticComponents,
       input: ({ node: _node, checked, ...props }) => (
-        <input
-          {...props}
-          checked={checked}
-          disabled={!onTaskToggle}
-          aria-label={t("markdown.toggleTask", { defaultValue: "切换待办完成状态" })}
-          onMouseDown={(event) => event.stopPropagation()}
-          onDoubleClick={(event) => event.stopPropagation()}
-          onChange={(event) => {
-            const item = event.currentTarget.closest<HTMLElement>("li[data-task-offset]");
-            if (item) onTaskToggle?.(Number(item.dataset.taskOffset), event.currentTarget.checked);
-          }}
-          className="mr-1.5 accent-bamboo enabled:cursor-pointer"
-        />
+        <span className="markdown-task-marker">
+          <input
+            {...props}
+            checked={checked}
+            disabled={!onTaskToggle}
+            aria-label={t("markdown.toggleTask", { defaultValue: "切换待办完成状态" })}
+            onMouseDown={(event) => event.stopPropagation()}
+            onDoubleClick={(event) => event.stopPropagation()}
+            onChange={(event) => {
+              const item = event.currentTarget.closest<HTMLElement>("li[data-task-offset]");
+              if (item)
+                onTaskToggle?.(Number(item.dataset.taskOffset), event.currentTarget.checked);
+            }}
+            className="accent-bamboo enabled:cursor-pointer"
+          />
+        </span>
       ),
       img: ({ src, alt, ...props }) => {
         const resolvedSrc = resolveMarkdownImageSrc(src, imageBaseDir, convertFileSrc);

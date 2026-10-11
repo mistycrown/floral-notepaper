@@ -16,7 +16,9 @@ export interface AppConfig {
   noteSurfaceAutoSave: boolean;
   tileColor: string;
   tileColorMode: TileColorMode;
+  tileColorPresets?: string[];
   theme: ThemeOption;
+  fontFamily?: string;
   fontSize: number;
   surfaceFontSize: number;
   tabIndentSize: number;

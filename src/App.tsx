@@ -7,6 +7,7 @@ import { TileShowcase } from "./components/TileShowcase";
 import { ToastContainer } from "./components/Toast";
 import { tabToIndentListener } from "indent-textarea";
 import { getConfig } from "./features/settings/api";
+import { applyFontFamily } from "./features/settings/fonts";
 import { applyTheme, watchSystemTheme } from "./features/settings/theme";
 import type { AppConfig, ThemeOption } from "./features/settings/types";
 import { getInitialRoute } from "./features/windows/windowRoutes";
@@ -21,6 +22,7 @@ function App() {
     let cleanup = () => {};
     getConfig()
       .then((config) => {
+        applyFontFamily(config.fontFamily);
         const theme = (config.theme || "system") as ThemeOption;
         applyTheme(theme);
         cleanup = watchSystemTheme(theme);
@@ -37,6 +39,7 @@ function App() {
   useEffect(() => {
     let themeCleanup = () => {};
     const unlisten = listen<AppConfig>("config-changed", (event) => {
+      applyFontFamily(event.payload.fontFamily);
       const theme = (event.payload.theme || "system") as ThemeOption;
       applyTheme(theme);
       themeCleanup();

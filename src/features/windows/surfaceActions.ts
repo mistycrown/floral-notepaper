@@ -1,4 +1,10 @@
-export type NoteSurfaceAction = "copy" | "save" | "switchToPad" | "switchToOpen" | "close";
+export type NoteSurfaceAction =
+  | "copy"
+  | "save"
+  | "switchToPad"
+  | "switchToOpen"
+  | "color"
+  | "close";
 
 export const NOTE_SURFACE_ACTION_EVENT = "floral-notepaper:surface-action";
 
@@ -8,6 +14,7 @@ export function isNoteSurfaceAction(value: unknown): value is NoteSurfaceAction 
     value === "save" ||
     value === "switchToPad" ||
     value === "switchToOpen" ||
+    value === "color" ||
     value === "close"
   );
 }
