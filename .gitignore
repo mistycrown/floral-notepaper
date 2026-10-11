@@ -67,3 +67,10 @@ temp/
 nul
 tsconfig.tsbuildinfo
 Docs/windows-install-chain-code-review.md
+
+## Local Cargo cache
+.cargo-local/
+
+## Local development configuration and plans
+.cargo/config.toml
+Docs/plans/

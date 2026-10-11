@@ -6,17 +6,17 @@
 
 <img src="./src-tauri/icons/icon.png" width="120" alt="花笺图标">
 
-# 花笺 Floral Notepaper
+# 花笺 Floral Notepaper · mistycrown 魔改版
 
 轻量、优雅、现代化的本地便签工具<br>
 基于 Tauri 2 + React 构建
 
-[反馈问题](https://github.com/Achilng/floral-notepaper/issues) · [更新日志](https://github.com/Achilng/floral-notepaper/releases) <br>
+[反馈问题](https://github.com/mistycrown/floral-notepaper/issues) · [更新日志](https://github.com/mistycrown/floral-notepaper/releases) <br>
 [快速开始](#快速开始) · [FAQ](https://github.com/Achilng/floral-notepaper/wiki) · [构建指南](#从源码构建)
 
-[![Version](https://img.shields.io/github/v/release/Achilng/floral-notepaper)](https://github.com/Achilng/floral-notepaper/releases/latest)
+[![Fork](https://img.shields.io/badge/fork-mistycrown-blue)](https://github.com/mistycrown/floral-notepaper)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-![Stars](https://img.shields.io/github/stars/Achilng/floral-notepaper?color=ffcb47&labelColor=black)</br>
+![Stars](https://img.shields.io/github/stars/mistycrown/floral-notepaper?color=ffcb47&labelColor=black)</br>
 ![React 19](https://img.shields.io/badge/React-19-blue?logo=react)
 ![Tauri v2](https://img.shields.io/badge/Tauri-v2-%2324C8D8?logo=tauri)
 ![Rust Edition 2021](https://img.shields.io/badge/Rust-2021-%23000000?logo=rust)<br>
@@ -27,6 +27,19 @@
 <!-- markdownlint-restore -->
 
 ---
+
+## 来源与本版改动
+
+本项目是 [Achilng/floral-notepaper](https://github.com/Achilng/floral-notepaper) 的个人维护衍生版本，由 mistycrown 维护。感谢 Achilng 和原项目贡献者提供的基础实现；原作者版权、MIT 许可证及第三方资源授权均予以保留。
+
+本版主要改动：
+
+- **交互式任务清单**：可在 Markdown 预览和桌面磁贴中勾选任务，并保存回笔记；右键菜单支持插入任务清单。
+- **便签操作调整**：简化编辑界面，通过右键菜单切换编辑和打开笔记；支持磁贴文字选择与快捷复制。
+- **保存流程改进**：串行处理保存请求，在切换笔记、固定磁贴和关闭窗口前保存待处理编辑。
+- **磁贴贴边隐藏**：磁贴靠近屏幕左、右或上边缘后延迟收起，鼠标移入时展开；拖动、菜单操作和多显示器边界会参与隐藏判断。
+
+当前提供修改后的源码，安装包请以[本仓库 Releases](https://github.com/mistycrown/floral-notepaper/releases) 实际发布内容为准。下方 Mirror 酱、Microsoft Store 和原项目 Wiki 属于原版渠道；应用内更新目前也沿用原版渠道，可能安装回原版，请通过本仓库获取本版后续更新。
 
 ## 为什么选择花笺
 
@@ -59,7 +72,7 @@
 
 ### 下载安装
 
-#### 通过Mirror酱下载
+#### 原版渠道：通过Mirror酱下载
 
 > [!TIP]
 > 如您的网络不便访问 GitHub，或下载速度过慢，您可以尝试通过Mirror酱下载花笺<br>
@@ -74,7 +87,7 @@
 
 #### 通过 GitHub 下载
 
-请前往 [Release 页](https://github.com/Achilng/floral-notepaper/releases/latest) 下载花笺
+请前往[本版 Releases](https://github.com/mistycrown/floral-notepaper/releases) 查看已发布安装包；尚无安装包时，请按下方指南从源码构建。
 
 ##### 下载参考
 
@@ -88,7 +101,7 @@
 | macOS   | AArch64 (Apple Silicon) | DMG              | floral-notepaper\_版本号\_aarch64.dmg       |
 | macOS   | x64 (Intel)             | DMG              | floral-notepaper\_版本号\_x64.dmg           |
 
-#### 通过 Microsoft Store 下载
+#### 原版渠道：通过 Microsoft Store 下载
 
 前往 [Microsoft Store](https://apps.microsoft.com/detail/9NRCC0ZSG81R) 下载花笺
 
@@ -113,15 +126,15 @@
 
 请参考 [CONTRIBUTING.md](CONTRIBUTING.md)
 
-## Star History
+## 原项目 Star History
 
 [![Star History Chart](https://star-history.dera.page/svg?repos=Achilng/floral-notepaper&type=Date&legend=top-left)](https://star-history.dera.page/#Achilng/floral-notepaper&Date)
 
-## 🌟 贡献者
+## 🌟 原项目贡献者
 
 [![contrib.rocks](https://contrib.rocks/image?repo=Achilng/floral-notepaper&max=1000)](https://contrib.rocks/image?repo=Achilng/floral-notepaper&max=1000)
 
-## Sponsors
+## 原项目 Sponsors
 
 <!-- markdownlint-disable -->
 

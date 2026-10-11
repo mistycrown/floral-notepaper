@@ -6,17 +6,17 @@
 
 <img src="./src-tauri/icons/icon.png" width="120" alt="花箋圖示">
 
-# 花箋 Floral Notepaper
+# 花箋 Floral Notepaper · mistycrown 修改版
 
 輕巧、優雅、現代化的本機便箋工具<br>
 基於 Tauri 2 + React 構建
 
-[回報問題](https://github.com/Achilng/floral-notepaper/issues) · [更新日誌](https://github.com/Achilng/floral-notepaper/releases) <br>
+[回報問題](https://github.com/mistycrown/floral-notepaper/issues) · [更新日誌](https://github.com/mistycrown/floral-notepaper/releases) <br>
 [快速開始](#快速開始) · [FAQ](https://github.com/Achilng/floral-notepaper/wiki) · [構建指南](#從原始碼構建)
 
-[![Version](https://img.shields.io/github/v/release/Achilng/floral-notepaper)](https://github.com/Achilng/floral-notepaper/releases/latest)
+[![Fork](https://img.shields.io/badge/fork-mistycrown-blue)](https://github.com/mistycrown/floral-notepaper)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-![Stars](https://img.shields.io/github/stars/Achilng/floral-notepaper?color=ffcb47&labelColor=black)</br>
+![Stars](https://img.shields.io/github/stars/mistycrown/floral-notepaper?color=ffcb47&labelColor=black)</br>
 ![React 19](https://img.shields.io/badge/React-19-blue?logo=react)
 ![Tauri v2](https://img.shields.io/badge/Tauri-v2-%2324C8D8?logo=tauri)
 ![Rust Edition 2021](https://img.shields.io/badge/Rust-2021-%23000000?logo=rust)<br>
@@ -27,6 +27,19 @@
 <!-- markdownlint-restore -->
 
 ---
+
+## 來源與本版改動
+
+本專案是 [Achilng/floral-notepaper](https://github.com/Achilng/floral-notepaper) 的個人維護衍生版本，由 mistycrown 維護。感謝 Achilng 及原專案貢獻者提供的基礎實作；原作者版權、MIT 授權及第三方資源授權均予以保留。
+
+本版主要改動：
+
+- **互動式任務清單**：可在 Markdown 預覽及桌面磁貼中勾選任務並儲存回筆記；右鍵選單支援插入任務清單。
+- **便箋操作調整**：簡化編輯介面，透過右鍵選單切換編輯及開啟筆記；支援磁貼文字選取與快速複製。
+- **儲存流程改進**：依序處理儲存請求，在切換筆記、固定磁貼及關閉視窗前儲存待處理編輯。
+- **磁貼貼邊隱藏**：磁貼靠近螢幕左、右或上邊緣後延遲收起，滑鼠移入時展開；拖曳、選單操作及多螢幕邊界會參與隱藏判斷。
+
+目前提供修改後的原始碼，安裝包請以[本儲存庫 Releases](https://github.com/mistycrown/floral-notepaper/releases) 實際發佈內容為準。下方 Mirror 醬、Microsoft Store 及原專案 Wiki 屬於原版渠道；應用程式內更新目前亦沿用原版渠道，可能安裝回原版，請透過本儲存庫取得本版後續更新。
 
 ## 為什麼選擇花箋
 
@@ -59,7 +72,7 @@
 
 ### 下載安裝
 
-#### 透過 Mirror 醬下載
+#### 原版渠道：透過 Mirror 醬下載
 
 > [!TIP]
 > 如您的網絡不便訪問 GitHub，或下載速度過慢，您可以嘗試透過 Mirror 醬下載花箋<br>
@@ -74,7 +87,7 @@
 
 #### 透過 GitHub 下載
 
-請前往 [Release 頁](https://github.com/Achilng/floral-notepaper/releases/latest) 下載花箋
+請前往[本版 Releases](https://github.com/mistycrown/floral-notepaper/releases) 查看已發佈安裝包；尚無安裝包時，請按下方指南從原始碼構建。
 
 ##### 下載參考
 
@@ -88,7 +101,7 @@
 | macOS   | AArch64 (Apple Silicon) | DMG              | floral-notepaper\_版本號\_aarch64.dmg       |
 | macOS   | x64 (Intel)             | DMG              | floral-notepaper\_版本號\_x64.dmg           |
 
-#### 透過 Microsoft Store 下載
+#### 原版渠道：透過 Microsoft Store 下載
 
 前往 [Microsoft Store](https://apps.microsoft.com/detail/9NRCC0ZSG81R) 下載花箋
 
@@ -113,15 +126,15 @@
 
 請參考 [CONTRIBUTING.md](CONTRIBUTING.md)
 
-## Star History
+## 原專案 Star History
 
 [![Star History Chart](https://star-history.dera.page/svg?repos=Achilng/floral-notepaper&type=Date&legend=top-left)](https://star-history.dera.page/#Achilng/floral-notepaper&Date)
 
-## 🌟 貢獻者
+## 🌟 原專案貢獻者
 
 [![contrib.rocks](https://contrib.rocks/image?repo=Achilng/floral-notepaper&max=1000)](https://contrib.rocks/image?repo=Achilng/floral-notepaper&max=1000)
 
-## Sponsors
+## 原專案 Sponsors
 
 <!-- markdownlint-disable -->
 

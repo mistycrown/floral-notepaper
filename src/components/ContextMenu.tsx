@@ -6,13 +6,16 @@ import { getConfig } from "../features/settings/api";
 import type { AppConfig } from "../features/settings/types";
 import { requestSurfaceAction } from "../features/windows/surfaceActions";
 import { getTileContextMenuItems } from "../features/windows/tileContextMenu";
+import { taskListInsertion } from "../features/markdown/taskLists";
 import { POPUP_VIEWPORT_MARGIN, useViewportPopupPosition } from "./popupPosition";
 
 interface MenuState {
   x: number;
   y: number;
   hasSelection: boolean;
-  type: "edit" | "tile";
+  type: "edit" | "tile" | "pad" | "preview";
+  padMode?: string;
+  canInsertTask: boolean;
 }
 
 const textareaSetter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set;
@@ -30,6 +33,8 @@ export function ContextMenuProvider({ children }: { children: React.ReactNode })
     null,
   );
   const tileCtrlCloseRef = useRef(true);
+  const selectionRef = useRef("");
+  const previewTargetRef = useRef<HTMLElement | null>(null);
   const tileContextMenuItems = useMemo(() => getTileContextMenuItems(t), [t]);
 
   useEffect(() => {
@@ -50,10 +55,15 @@ export function ContextMenuProvider({ children }: { children: React.ReactNode })
     function handleContextMenu(event: MouseEvent) {
       const target = event.target as HTMLElement;
       const isEditable =
-        target.tagName === "TEXTAREA" || target.tagName === "INPUT" || target.isContentEditable;
+        target.tagName === "TEXTAREA" ||
+        (target instanceof HTMLInputElement &&
+          ["text", "search", "email", "url", "tel", "password", "number"].includes(target.type)) ||
+        target.isContentEditable;
       const tileTarget = target.closest<HTMLElement>('[data-context-menu="tile"]');
+      const padTarget = target.closest<HTMLElement>('[data-context-menu="pad"]');
+      const previewTarget = target.closest<HTMLElement>(".markdown-selectable");
 
-      if (!isEditable && !tileTarget) {
+      if (!isEditable && !tileTarget && !padTarget && !previewTarget) {
         event.preventDefault();
         return;
       }
@@ -68,6 +78,8 @@ export function ContextMenuProvider({ children }: { children: React.ReactNode })
       if (target instanceof HTMLTextAreaElement || target instanceof HTMLInputElement) {
         selection = target.value.slice(target.selectionStart ?? 0, target.selectionEnd ?? 0);
       }
+      selectionRef.current = selection;
+      previewTargetRef.current = previewTarget;
 
       if (tileTarget) {
         editableTargetRef.current = null;
@@ -75,19 +87,23 @@ export function ContextMenuProvider({ children }: { children: React.ReactNode })
         setMenu({
           x: event.clientX,
           y: event.clientY,
-          hasSelection: false,
+          hasSelection: selection.length > 0,
           type: "tile",
+          canInsertTask: false,
         });
         return;
       }
 
-      editableTargetRef.current = target;
+      editableTargetRef.current = isEditable ? target : null;
       setMenuClosing(false);
       setMenu({
         x: event.clientX,
         y: event.clientY,
         hasSelection: selection.length > 0,
-        type: "edit",
+        type: isEditable ? "edit" : padTarget ? "pad" : "preview",
+        padMode: padTarget?.dataset.padMode,
+        canInsertTask:
+          target instanceof HTMLTextAreaElement && !target.disabled && !target.readOnly,
       });
     }
 
@@ -160,10 +176,24 @@ export function ContextMenuProvider({ children }: { children: React.ReactNode })
         case "selectAll":
           target.select();
           break;
+        case "insertTask": {
+          const insertion = taskListInsertion(value, start, end);
+          setValue(insertion.value, insertion.cursor);
+          break;
+        }
       }
     } else {
-      target?.focus();
-      document.execCommand(command);
+      if (command === "copy" && selectionRef.current) {
+        await writeText(selectionRef.current);
+      } else if (command === "selectAll" && previewTargetRef.current) {
+        const range = document.createRange();
+        range.selectNodeContents(previewTargetRef.current);
+        window.getSelection()?.removeAllRanges();
+        window.getSelection()?.addRange(range);
+      } else {
+        target?.focus();
+        document.execCommand(command);
+      }
     }
 
     dismissMenu();
@@ -181,35 +211,81 @@ export function ContextMenuProvider({ children }: { children: React.ReactNode })
           ? tileContextMenuItems.map((item) => ({
               ...item,
               shortcut: "",
-              action: () => runSurfaceAction(item.action),
+              action: () =>
+                item.action === "copy" && menu.hasSelection
+                  ? runCommand("copy")
+                  : runSurfaceAction(item.action),
               disabled: false,
             }))
           : [
-              {
-                label: t("contextMenu.edit.cut", { defaultValue: "剪切" }),
-                shortcut: "Ctrl+X",
-                action: () => runCommand("cut"),
-                disabled: !menu.hasSelection,
-              },
-              {
-                label: t("contextMenu.edit.copy", { defaultValue: "复制" }),
-                shortcut: "Ctrl+C",
-                action: () => runCommand("copy"),
-                disabled: !menu.hasSelection,
-              },
-              {
-                label: t("contextMenu.edit.paste", { defaultValue: "粘贴" }),
-                shortcut: "Ctrl+V",
-                action: () => runCommand("paste"),
-                disabled: false,
-              },
-              { separator: true as const },
-              {
-                label: t("contextMenu.edit.selectAll", { defaultValue: "全选" }),
-                shortcut: "Ctrl+A",
-                action: () => runCommand("selectAll"),
-                disabled: false,
-              },
+              ...(menu.type === "edit"
+                ? [
+                    {
+                      label: t("contextMenu.edit.cut", { defaultValue: "剪切" }),
+                      shortcut: "Ctrl+X",
+                      action: () => runCommand("cut"),
+                      disabled: !menu.hasSelection,
+                    },
+                    {
+                      label: t("contextMenu.edit.copy", { defaultValue: "复制" }),
+                      shortcut: "Ctrl+C",
+                      action: () => runCommand("copy"),
+                      disabled: !menu.hasSelection,
+                    },
+                    {
+                      label: t("contextMenu.edit.paste", { defaultValue: "粘贴" }),
+                      shortcut: "Ctrl+V",
+                      action: () => runCommand("paste"),
+                      disabled: false,
+                    },
+                  ]
+                : menu.type === "preview"
+                  ? [
+                      {
+                        label: t("contextMenu.edit.copy", { defaultValue: "复制" }),
+                        shortcut: "Ctrl+C",
+                        action: () => runCommand("copy"),
+                        disabled: !menu.hasSelection,
+                      },
+                    ]
+                  : []),
+              ...(menu.type === "edit" || menu.type === "preview"
+                ? [
+                    { separator: true as const },
+                    {
+                      label: t("contextMenu.edit.selectAll", { defaultValue: "全选" }),
+                      shortcut: "Ctrl+A",
+                      action: () => runCommand("selectAll"),
+                      disabled: false,
+                    },
+                  ]
+                : []),
+              ...(menu.canInsertTask
+                ? [
+                    { separator: true as const },
+                    {
+                      label: t("contextMenu.edit.insertTask", { defaultValue: "插入待办列表" }),
+                      shortcut: "- [ ]",
+                      action: () => runCommand("insertTask"),
+                      disabled: false,
+                    },
+                  ]
+                : []),
+              ...(menu.padMode
+                ? [
+                    ...(menu.type === "edit" ? [{ separator: true as const }] : []),
+                    {
+                      label:
+                        menu.padMode === "open"
+                          ? t("notepad.tab.edit", { defaultValue: "编辑" })
+                          : t("notepad.tab.open", { defaultValue: "打开" }),
+                      shortcut: "",
+                      action: () =>
+                        runSurfaceAction(menu.padMode === "open" ? "switchToPad" : "switchToOpen"),
+                      disabled: false,
+                    },
+                  ]
+                : []),
             ]
         : [],
     [menu, runCommand, t, tileContextMenuItems],
@@ -221,6 +297,7 @@ export function ContextMenuProvider({ children }: { children: React.ReactNode })
       {menu && (
         <div
           ref={menuRef}
+          data-edge-hide-block="true"
           className={`fixed z-[9999] min-w-[152px] py-1.5 bg-cloud/95 backdrop-blur-sm border border-paper-deep/50 rounded-lg overflow-x-hidden overflow-y-auto select-none ${menuClosing ? "animate-menu-exit" : "animate-menu-enter"}`}
           style={{
             left: menuPosition?.x ?? menu.x,
@@ -228,7 +305,10 @@ export function ContextMenuProvider({ children }: { children: React.ReactNode })
             maxWidth: `calc(100vw - ${POPUP_VIEWPORT_MARGIN * 2}px)`,
             maxHeight: `calc(100vh - ${POPUP_VIEWPORT_MARGIN * 2}px)`,
           }}
-          onMouseDown={(event) => event.stopPropagation()}
+          onMouseDown={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+          }}
         >
           {items.map((item, index) =>
             "separator" in item ? (

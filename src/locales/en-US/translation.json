@@ -30,6 +30,7 @@
     "edit": {
       "copy": "Copy",
       "cut": "Cut",
+      "insertTask": "Insert task list",
       "paste": "Paste",
       "selectAll": "Select All"
     },
@@ -60,6 +61,7 @@
     "copied": "Copied",
     "copy": "Copy",
     "emptyHint": "Preview of the current note",
+    "toggleTask": "Toggle task completion",
     "alert": {
       "note": "Note",
       "tip": "Tip",

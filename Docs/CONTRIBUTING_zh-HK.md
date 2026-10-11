@@ -21,7 +21,7 @@
 ### 複製與啟動
 
 ```bash
-git clone git@github.com:Achilng/floral-notepaper.git
+git clone https://github.com/mistycrown/floral-notepaper.git
 cd floral-notepaper
 npm install
 
@@ -85,7 +85,7 @@ npx oxfmt --check                           # 格式檢查
 
 ## Pull Request 流程
 
-1. **先搜尋** [已有 PR](https://github.com/Achilng/floral-notepaper/pulls)，確認沒有雷同的提交，避免重複勞動
+1. **先搜尋** [已有 PR](https://github.com/mistycrown/floral-notepaper/pulls)，確認沒有雷同的提交，避免重複勞動
 2. Fork 本倉庫，從 `main` 分支創建你的功能/修復分支
 3. 開發完成後，確保本機檢查全部通過
 4. 提交 PR 到 `main` 分支，**填寫 PR 模板**中的各項內容
@@ -100,6 +100,6 @@ PR 標題同樣遵循 Conventional Commits 格式，例如 `feat: 添加筆記�
 
 ## 問題回饋
 
-- 報告 bug：[提交 Issue](https://github.com/Achilng/floral-notepaper/issues/new?template=bug.yml)
-- 功能請求：[提交 Issue](https://github.com/Achilng/floral-notepaper/issues/new?template=enhancement.yml)
-- 一般討論：[GitHub Discussions](https://github.com/Achilng/floral-notepaper/discussions)
+- 報告 bug：[提交 Issue](https://github.com/mistycrown/floral-notepaper/issues/new?template=bug.yml)
+- 功能請求：[提交 Issue](https://github.com/mistycrown/floral-notepaper/issues/new?template=enhancement.yml)
+- 一般討論：[本版 Issues](https://github.com/mistycrown/floral-notepaper/issues)

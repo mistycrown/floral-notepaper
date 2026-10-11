@@ -11,6 +11,7 @@ describe("note surface actions", () => {
     expect(isNoteSurfaceAction("copy")).toBe(true);
     expect(isNoteSurfaceAction("save")).toBe(true);
     expect(isNoteSurfaceAction("switchToPad")).toBe(true);
+    expect(isNoteSurfaceAction("switchToOpen")).toBe(true);
     expect(isNoteSurfaceAction("close")).toBe(true);
     expect(isNoteSurfaceAction("delete")).toBe(false);
   });

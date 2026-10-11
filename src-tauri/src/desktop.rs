@@ -1160,6 +1160,7 @@ pub fn setup_desktop(app: &mut App) -> Result<(), Box<dyn Error>> {
 
 pub fn handle_window_event(window: &Window, event: &WindowEvent) {
     if matches!(event, WindowEvent::Destroyed) {
+        crate::edge_hide::remove(window.app_handle(), window.label());
         if let Some(note_id) = window.label().strip_prefix("tile-") {
             let _ = window
                 .app_handle()

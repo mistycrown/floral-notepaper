@@ -13,6 +13,7 @@ import type { Components } from "react-markdown";
 import "katex/dist/katex.min.css";
 import remarkAlerts from "./remarkAlerts";
 import { resolveMarkdownImageSrc } from "./imageSrc";
+import { remarkTaskOffsets } from "./taskLists";
 
 function CodeBlock({ children, language }: { children: React.ReactNode; language?: string }) {
   const { t } = useTranslation();
@@ -69,9 +70,10 @@ interface MarkdownPreviewProps {
   fontSize?: number;
   renderHtml?: boolean;
   imageBaseDir?: string;
+  onTaskToggle?: (offset: number, checked: boolean) => void;
 }
 
-const remarkPlugins = [remarkGfm, remarkMath, remarkAlerts];
+const remarkPlugins = [remarkGfm, remarkMath, remarkAlerts, remarkTaskOffsets];
 const sanitizeSchema = {
   ...defaultSchema,
   tagNames: [...(defaultSchema.tagNames ?? []), "mark", "center", "font", "u", "abbr"],
@@ -83,6 +85,8 @@ const sanitizeSchema = {
       "className",
       "data-alert-type",
       "dataAlertType",
+      "data-task-offset",
+      "dataTaskOffset",
     ],
     font: ["color", "size", "face"],
     abbr: ["title"],
@@ -205,7 +209,16 @@ const staticComponents: Components = {
       {children}
     </ol>
   ),
-  li: ({ children }) => <li className="text-ink-soft leading-[1.9]">{children}</li>,
+  li: ({ node: _node, children, className, ...props }) => (
+    <li
+      {...props}
+      className={`text-ink-soft leading-[1.9] ${className ?? ""} ${
+        className?.split(/\s+/).includes("task-list-item") ? "list-none" : ""
+      }`}
+    >
+      {children}
+    </li>
+  ),
   hr: () => (
     <hr className="my-6 border-none h-px bg-gradient-to-r from-transparent via-paper-deep to-transparent" />
   ),
@@ -272,9 +285,6 @@ const staticComponents: Components = {
   td: ({ children }) => (
     <td className="px-3 py-1.5 border border-paper-deep/35 text-ink-soft">{children}</td>
   ),
-  input: ({ checked, ...props }) => (
-    <input {...props} checked={checked} disabled className="mr-1.5 accent-bamboo" />
-  ),
 };
 
 export function MarkdownPreview({
@@ -282,11 +292,27 @@ export function MarkdownPreview({
   fontSize = 14,
   renderHtml = false,
   imageBaseDir,
+  onTaskToggle,
 }: MarkdownPreviewProps) {
   const { t } = useTranslation();
   const components = useMemo<Components>(
     () => ({
       ...staticComponents,
+      input: ({ node: _node, checked, ...props }) => (
+        <input
+          {...props}
+          checked={checked}
+          disabled={!onTaskToggle}
+          aria-label={t("markdown.toggleTask", { defaultValue: "切换待办完成状态" })}
+          onMouseDown={(event) => event.stopPropagation()}
+          onDoubleClick={(event) => event.stopPropagation()}
+          onChange={(event) => {
+            const item = event.currentTarget.closest<HTMLElement>("li[data-task-offset]");
+            if (item) onTaskToggle?.(Number(item.dataset.taskOffset), event.currentTarget.checked);
+          }}
+          className="mr-1.5 accent-bamboo enabled:cursor-pointer"
+        />
+      ),
       img: ({ src, alt, ...props }) => {
         const resolvedSrc = resolveMarkdownImageSrc(src, imageBaseDir, convertFileSrc);
         return (
@@ -300,7 +326,7 @@ export function MarkdownPreview({
         );
       },
     }),
-    [imageBaseDir],
+    [imageBaseDir, onTaskToggle, t],
   );
   return (
     <div className="font-body markdown-selectable" style={{ fontSize: `${fontSize}px` }}>

@@ -30,6 +30,7 @@
     "edit": {
       "copy": "複製",
       "cut": "剪下",
+      "insertTask": "插入待辦清單",
       "paste": "貼上",
       "selectAll": "全選"
     },
@@ -60,6 +61,7 @@
     "copied": "已複製",
     "copy": "複製",
     "emptyHint": "預覽區會顯示目前筆記內容",
+    "toggleTask": "切換待辦完成狀態",
     "alert": {
       "note": "備註",
       "tip": "提示",

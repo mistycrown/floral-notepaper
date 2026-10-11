@@ -15,6 +15,7 @@ import { emit, listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { exportMarkdownNote, importMarkdownNote } from "../features/importExport/api";
 import { MarkdownPreviewLazy as MarkdownPreview } from "../features/markdown/MarkdownPreviewLazy";
+import { toggleMarkdownTask } from "../features/markdown/taskLists";
 import { showToast } from "./Toast";
 import {
   createScrollSyncMap,
@@ -3033,6 +3034,19 @@ export function MainWindow({
                       >
                         <MarkdownPreview
                           content={deferredContent}
+                          onTaskToggle={(offset, checked) => {
+                            if (contentValueRef.current !== deferredContent) return;
+                            const next = toggleMarkdownTask(
+                              contentValueRef.current,
+                              offset,
+                              checked,
+                            );
+                            if (next === contentValueRef.current) return;
+                            contentValueRef.current = next;
+                            setContent(next);
+                            markDirty();
+                            void saveCurrentNote();
+                          }}
                           fontSize={settingsConfig?.fontSize ?? 14}
                           renderHtml={settingsConfig?.renderHtmlMarkdown ?? false}
                           imageBaseDir={imageBaseDir ?? undefined}

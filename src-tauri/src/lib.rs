@@ -1,4 +1,6 @@
 pub mod desktop;
+mod edge_hide;
+mod edge_hide_geometry;
 pub mod json_io;
 pub mod locales;
 pub mod services;
@@ -436,6 +438,7 @@ pub fn try_exit_for_cli_version_or_help() {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .manage(edge_hide::EdgeHideState::default())
         .plugin(tauri_plugin_cli::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_clipboard_manager::init())
@@ -464,10 +467,12 @@ pub fn run() {
                 updater::start_auto_check_scheduler(app.handle().clone());
             }
             desktop::setup_desktop(app)?;
+            edge_hide::start(app.handle().clone());
             Ok(())
         })
         .on_window_event(desktop::handle_window_event)
         .invoke_handler(tauri::generate_handler![
+            edge_hide::set_tile_edge_hide,
             app_name,
             notes_list,
             notes_get,
@@ -517,6 +522,9 @@ pub fn run() {
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
         .run(move |_app_handle, _event| {
+            if matches!(&_event, tauri::RunEvent::Exit) {
+                edge_hide::stop(_app_handle);
+            }
             #[cfg(target_os = "macos")]
             if let tauri::RunEvent::Reopen {
                 has_visible_windows,

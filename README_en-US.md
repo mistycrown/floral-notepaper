@@ -6,17 +6,17 @@
 
 <img src="./src-tauri/icons/icon.png" width="120" alt="Floral Notepaper Icon">
 
-# Floral Notepaper
+# Floral Notepaper · mistycrown Fork
 
 A lightweight, elegant, and modern sticky note app for your desktop<br>
 Built with Tauri 2 + React
 
-[Report an Issue](https://github.com/Achilng/floral-notepaper/issues) · [Changelog](https://github.com/Achilng/floral-notepaper/releases) <br>
+[Report an Issue](https://github.com/mistycrown/floral-notepaper/issues) · [Changelog](https://github.com/mistycrown/floral-notepaper/releases) <br>
 [Quick Start](#quick-start) · [FAQ](https://github.com/Achilng/floral-notepaper/wiki) · [Building from Source](#building-from-source)
 
-[![Version](https://img.shields.io/github/v/release/Achilng/floral-notepaper)](https://github.com/Achilng/floral-notepaper/releases/latest)
+[![Fork](https://img.shields.io/badge/fork-mistycrown-blue)](https://github.com/mistycrown/floral-notepaper)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-![Stars](https://img.shields.io/github/stars/Achilng/floral-notepaper?color=ffcb47&labelColor=black)</br>
+![Stars](https://img.shields.io/github/stars/mistycrown/floral-notepaper?color=ffcb47&labelColor=black)</br>
 ![React 19](https://img.shields.io/badge/React-19-blue?logo=react)
 ![Tauri v2](https://img.shields.io/badge/Tauri-v2-%2324C8D8?logo=tauri)
 ![Rust Edition 2021](https://img.shields.io/badge/Rust-2021-%23000000?logo=rust)<br>
@@ -27,6 +27,19 @@ Built with Tauri 2 + React
 <!-- markdownlint-restore -->
 
 ---
+
+## Attribution and Changes in This Fork
+
+This is a derivative of [Achilng/floral-notepaper](https://github.com/Achilng/floral-notepaper), maintained by mistycrown. Thanks to Achilng and the upstream contributors for the original implementation. The original copyright, MIT license, and third-party resource licenses are preserved.
+
+Changes in this fork:
+
+- **Interactive task lists**: toggle tasks in Markdown previews and desktop tiles, save them back to the note, and insert task lists through the context menu.
+- **Note interactions**: a simpler editor, context-menu actions to switch between editing and opening notes, selectable tile text, and a quick copy button.
+- **Save handling**: serialize saves and flush pending edits before switching notes, pinning, or closing a window.
+- **Tile edge hiding**: collapse tiles near the left, right, or top screen edge after a delay and reveal them on hover, accounting for dragging, menus, and monitor boundaries.
+
+The modified source is available here. Check [this fork's Releases](https://github.com/mistycrown/floral-notepaper/releases) for published installers. MirrorChyan, Microsoft Store, and the upstream Wiki below belong to the original project. In-app updates currently also use upstream channels and may install the original version; obtain future fork updates from this repository.
 
 ## Why Floral Notepaper
 
@@ -59,7 +72,7 @@ Most note-taking or sticky note apps out there are either bloated and steep to l
 
 ### Download
 
-#### Via MirrorChyan
+#### Original Version: MirrorChyan
 
 > [!TIP]
 > If you have trouble accessing GitHub or experience slow downloads, try downloading Floral Notepaper via MirrorChyan.<br>
@@ -74,7 +87,7 @@ Most note-taking or sticky note apps out there are either bloated and steep to l
 
 #### Via GitHub
 
-Head over to the [Releases page](https://github.com/Achilng/floral-notepaper/releases/latest) to download.
+Check [this fork's Releases](https://github.com/mistycrown/floral-notepaper/releases) for published installers. If none are available, follow the source build instructions below.
 
 ##### Download Reference
 
@@ -88,7 +101,7 @@ Head over to the [Releases page](https://github.com/Achilng/floral-notepaper/rel
 | macOS    | AArch64 (Apple Silicon) | DMG                     | floral-notepaper_x.y.z_aarch64.dmg       |
 | macOS    | x64 (Intel)             | DMG                     | floral-notepaper_x.y.z_x64.dmg           |
 
-#### Via Microsoft Store
+#### Original Version: Microsoft Store
 
 Download Floral Notepaper from the [Microsoft Store](https://apps.microsoft.com/detail/9NRCC0ZSG81R)
 
@@ -113,15 +126,15 @@ If you encounter installation issues, please refer to:
 
 Please refer to [CONTRIBUTING.md](CONTRIBUTING.md).
 
-## Star History
+## Upstream Star History
 
 [![Star History Chart](https://star-history.dera.page/svg?repos=Achilng/floral-notepaper&type=Date&legend=top-left)](https://star-history.dera.page/#Achilng/floral-notepaper&Date)
 
-## 🌟 Contributors
+## 🌟 Upstream Contributors
 
 [![contrib.rocks](https://contrib.rocks/image?repo=Achilng/floral-notepaper&max=1000)](https://contrib.rocks/image?repo=Achilng/floral-notepaper&max=1000)
 
-## Sponsors
+## Upstream Sponsors
 
 <!-- markdownlint-disable -->
 

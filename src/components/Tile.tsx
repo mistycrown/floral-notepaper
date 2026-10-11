@@ -17,6 +17,8 @@ export interface TileProps extends Omit<
   fontSize?: number;
   renderMarkdown?: boolean;
   imageBaseDir?: string;
+  onTaskToggle?: (offset: number, checked: boolean) => void;
+  contentBottomPadding?: number;
 }
 
 const MARK_SIZE = 8;
@@ -77,6 +79,8 @@ export function Tile({
   fontSize = 14,
   renderMarkdown = false,
   imageBaseDir,
+  onTaskToggle,
+  contentBottomPadding,
   className = "",
   style,
   children,
@@ -107,13 +111,16 @@ export function Tile({
   return (
     <div
       {...divProps}
-      className={`app-surface-frame relative border overflow-hidden select-none shadow-[0_1px_8px_rgba(26,26,24,0.04)] hover:shadow-[0_6px_24px_rgba(26,26,24,0.07)] ${className}`}
+      className={`app-surface-frame relative border overflow-hidden shadow-[0_1px_8px_rgba(26,26,24,0.04)] hover:shadow-[0_6px_24px_rgba(26,26,24,0.07)] ${className}`}
       style={mergedStyle}
     >
-      <div className="px-4 pt-4 pb-4 h-full overflow-y-auto scrollbar-hidden">
+      <div
+        className="px-4 pt-4 pb-4 h-full overflow-y-auto scrollbar-hidden"
+        style={contentBottomPadding == null ? undefined : { paddingBottom: contentBottomPadding }}
+      >
         {title && (
           <div
-            className="font-display tracking-wide mb-3 leading-snug"
+            className="select-none cursor-move font-display tracking-wide mb-3 leading-snug"
             style={{ color: titleColor, fontSize: `${fontSize + 1}px` }}
           >
             {title}
@@ -121,17 +128,19 @@ export function Tile({
         )}
         {content ? (
           renderMarkdown ? (
-            <div style={{ color: contentColor }}>
+            <div data-note-selectable="true" style={{ color: contentColor }}>
               <MarkdownPreview
                 content={content}
                 fontSize={fontSize}
                 renderHtml={false}
                 imageBaseDir={imageBaseDir}
+                onTaskToggle={onTaskToggle}
               />
             </div>
           ) : (
             <div
-              className="leading-[1.8] whitespace-pre-wrap font-body"
+              data-note-selectable="true"
+              className="note-selectable leading-[1.8] whitespace-pre-wrap font-body"
               style={{ color: contentColor, fontSize: `${fontSize}px` }}
             >
               {content}

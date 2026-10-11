@@ -270,12 +270,14 @@ input::placeholder {
   color: var(--color-ink-ghost);
 }
 
+.note-selectable,
 .markdown-selectable,
 .markdown-selectable * {
   -webkit-user-select: text;
   user-select: text;
 }
 
+.note-selectable,
 .markdown-selectable {
   cursor: text;
 }
