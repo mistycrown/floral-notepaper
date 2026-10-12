@@ -28,17 +28,23 @@
 **Files:** `src/features/settings/types.ts`, `src-tauri/src/services/notes.rs`, AppConfig fixtures in `src-tauri/src/desktop.rs`.
 **Interfaces:** optional TypeScript `tileBackgroundTransparency?: number`; Rust `tile_background_transparency: u32`, serde default 0.
 
-- [ ] Add Rust tests for default, old config, save/reload, and clamping on load/save.
-- [ ] Add the field, normalize to at most 80, and update explicit AppConfig fixtures.
-- [ ] Run targeted Rust config tests and frontend type checking.
+- [x] Add Rust tests for default, old config, save/reload, and clamping on load/save.
+- [x] Add the field, normalize to at most 80, and update explicit AppConfig fixtures.
+- [x] Run targeted Rust config tests and frontend type checking.
 
 ### Task 2: Control and render pinned backgrounds
 
 **Files:** `src/features/settings/tileColor.ts`, `src/components/SettingsPanel.tsx`, `src/components/Tile.tsx`, `src/components/NotePad.tsx`, three locale translation files.
 **Interfaces:** `normalizeTileBackgroundTransparency(value?: number): number`; Tile `backgroundTransparency?: number`; AppConfig field from Task 1.
 
-- [ ] Add tests for background alpha with opaque content, setting slider updates, and initial/live window settings.
-- [ ] Add an accessible 0–80 slider and translated label/description; set background color alpha only.
-- [ ] Load and listen for the field in NotePad, passing it only to the tile branch.
-- [ ] Test tile-to-pad behavior, per-note colors, and default compatibility.
-- [ ] Run focused Vitest tests, TypeScript, formatting/lint checks, and Vite production build.
+- [x] Add tests for background alpha with opaque content, setting slider updates, and initial/live window settings.
+- [x] Add an accessible 0–80 slider and translated label/description; set background color alpha only.
+- [x] Load and listen for the field in NotePad, passing it only to the tile branch.
+- [x] Test tile-to-pad behavior, per-note colors, and default compatibility.
+- [x] Run focused Vitest tests, TypeScript, formatting/lint checks, and Vite production build.
+
+## Validation
+
+- Focused frontend suite: 27 tests passed across Tile, NotePad synchronization/settings, color normalization, and locale resources.
+- Rust config suite: 9 tests passed; transparency clamp/persistence test: 1 passed.
+- TypeScript, oxlint, rustfmt, and Vite production build passed.

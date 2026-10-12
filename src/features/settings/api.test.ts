@@ -69,6 +69,7 @@ describe("settings api", () => {
       closeToTray: false,
       autostart: true,
       defaultViewMode: "preview",
+      compactNoteList: true,
       noteAutoSave: false,
       noteSurfaceAutoSave: false,
       tileColor: "#efe8dc",

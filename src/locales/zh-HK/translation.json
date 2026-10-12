@@ -1,4 +1,32 @@
 {
+  "outline": {
+    "noteType": "便箋類型",
+    "text": "文字",
+    "list": "清單",
+    "editor": "大綱編輯",
+    "newList": "新增清單便箋",
+    "toBullet": "轉換為普通條目",
+    "toTodo": "轉換為待辦",
+    "expand": "展開子節點",
+    "collapse": "摺疊子節點",
+    "complete": "完成待辦",
+    "item": "大綱條目",
+    "placeholder": "寫一項……",
+    "nodeType": "節點類型",
+    "bullet": "條目",
+    "todo": "待辦",
+    "add": "+ 新增條目"
+  },
+  "tags": {
+    "suggestions": "已有標籤 · ↑↓ 選擇，Enter 補全，Esc 關閉",
+    "groupBy": "筆記分組方式",
+    "byCategory": "分類",
+    "byTag": "標籤",
+    "all": "全部",
+    "untagged": "無標籤",
+    "noteTags": "目前筆記標籤",
+    "hint": "輸入 #標籤 新增標籤，例如 #工作；刪除正文標籤即可移除"
+  },
   "noteColor": {
     "hexLabel": "十六進制色值",
     "invalidHex": "請輸入 #RRGGBB 或 #RGB 格式的有效色值",
@@ -217,6 +245,10 @@
     }
   },
   "settings": {
+    "compactNoteList": {
+      "label": "精簡模式",
+      "hint": "筆記瀏覽卡片只顯示一行標題，隱藏預覽、日期和字數。"
+    },
     "tileColorPresets": {
       "label": "便箋快捷色格",
       "slot": "色格 {{index}}",
@@ -246,6 +278,10 @@
       "label": "預設檢視",
       "preview": "預覽",
       "split": "分欄"
+    },
+    "tileLineHeight": {
+      "label": "桌面便箋行距",
+      "value": "{{value}} 倍"
     },
     "fontSize": {
       "editor": "編輯器字級",
@@ -288,6 +324,10 @@
       "label": "主題",
       "light": "淺色",
       "system": "跟隨系統"
+    },
+    "tileBackgroundTransparency": {
+      "label": "釘選便箋背景透明度",
+      "hint": "0% 為不透明；數值越大，背景越透明。所有桌面釘選便箋即時生效，文字和按鈕保持清晰。"
     },
     "tileColor": {
       "custom": "自訂",

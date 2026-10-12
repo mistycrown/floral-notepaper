@@ -1,4 +1,32 @@
 {
+  "outline": {
+    "noteType": "便签类型",
+    "text": "文本",
+    "list": "列表",
+    "editor": "大纲编辑",
+    "newList": "新建列表便签",
+    "toBullet": "转换为普通条目",
+    "toTodo": "转换为待办",
+    "expand": "展开子节点",
+    "collapse": "折叠子节点",
+    "complete": "完成待办",
+    "item": "大纲条目",
+    "placeholder": "写一项……",
+    "nodeType": "节点类型",
+    "bullet": "条目",
+    "todo": "待办",
+    "add": "+ 添加条目"
+  },
+  "tags": {
+    "suggestions": "已有标签 · ↑↓ 选择，Enter 补全，Esc 关闭",
+    "groupBy": "笔记分组方式",
+    "byCategory": "分类",
+    "byTag": "标签",
+    "all": "全部",
+    "untagged": "无标签",
+    "noteTags": "当前笔记标签",
+    "hint": "输入 #标签 添加标签，例如 #工作；删除正文标签即可移除"
+  },
   "noteColor": {
     "hexLabel": "十六进制色值",
     "invalidHex": "请输入 #RRGGBB 或 #RGB 格式的有效色值",
@@ -217,6 +245,10 @@
     }
   },
   "settings": {
+    "compactNoteList": {
+      "label": "紧凑模式",
+      "hint": "笔记浏览卡片只显示一行标题，隐藏预览、日期和字数。"
+    },
     "tileColorPresets": {
       "label": "便签快捷色格",
       "slot": "色格 {{index}}",
@@ -246,6 +278,10 @@
       "label": "默认视图",
       "preview": "预览",
       "split": "分栏"
+    },
+    "tileLineHeight": {
+      "label": "桌面便签行距",
+      "value": "{{value}} 倍"
     },
     "fontSize": {
       "editor": "编辑器字号",
@@ -288,6 +324,10 @@
       "label": "主题",
       "light": "浅色",
       "system": "跟随系统"
+    },
+    "tileBackgroundTransparency": {
+      "label": "钉选便签背景透明度",
+      "hint": "0% 为不透明；数值越大，背景越透明。所有桌面钉选便签即时生效，文字和按钮保持清晰。"
     },
     "tileColor": {
       "custom": "自定义",

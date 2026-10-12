@@ -9,9 +9,18 @@ import {
   DEFAULT_TILE_COLOR_PRESETS,
   normalizeTileColorPresets,
   getTileAccentColor,
+  normalizeTileBackgroundTransparency,
 } from "./tileColor";
 
 describe("tile color settings", () => {
+  test("transparency defaults to opaque and repairs invalid or out-of-range settings", () => {
+    for (const value of [undefined, NaN, Infinity, -Infinity, -1]) {
+      expect(normalizeTileBackgroundTransparency(value)).toBe(0);
+    }
+    expect(normalizeTileBackgroundTransparency(50)).toBe(50);
+    expect(normalizeTileBackgroundTransparency(100)).toBe(80);
+    expect(normalizeTileBackgroundTransparency(40.7)).toBe(41);
+  });
   test("parses pasted hex colors without accepting incomplete or invalid input", () => {
     expect(parseHexColor(" #AbC123 ")).toBe("#abc123");
     expect(parseHexColor("#0fA")).toBe("#00ffaa");

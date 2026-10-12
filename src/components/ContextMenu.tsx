@@ -8,6 +8,8 @@ import { requestSurfaceAction } from "../features/windows/surfaceActions";
 import { getTileContextMenuItems } from "../features/windows/tileContextMenu";
 import { taskListInsertion } from "../features/markdown/taskLists";
 import { POPUP_VIEWPORT_MARGIN, useViewportPopupPosition } from "./popupPosition";
+import { requestOutlineNodeType } from "../features/notes/outlineNodeActions";
+import type { OutlineNode } from "../features/notes/types";
 
 interface MenuState {
   x: number;
@@ -16,6 +18,7 @@ interface MenuState {
   type: "edit" | "tile" | "pad" | "preview";
   padMode?: string;
   canInsertTask: boolean;
+  outlineKind?: OutlineNode["kind"];
 }
 
 const textareaSetter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set;
@@ -35,6 +38,7 @@ export function ContextMenuProvider({ children }: { children: React.ReactNode })
   const tileCtrlCloseRef = useRef(true);
   const selectionRef = useRef("");
   const previewTargetRef = useRef<HTMLElement | null>(null);
+  const outlineTargetRef = useRef<HTMLElement | null>(null);
   const tileContextMenuItems = useMemo(() => getTileContextMenuItems(t), [t]);
 
   useEffect(() => {
@@ -62,8 +66,11 @@ export function ContextMenuProvider({ children }: { children: React.ReactNode })
       const tileTarget = target.closest<HTMLElement>('[data-context-menu="tile"]');
       const padTarget = target.closest<HTMLElement>('[data-context-menu="pad"]');
       const previewTarget = target.closest<HTMLElement>(".markdown-selectable");
+      const outlineTarget = target.closest('[data-outline-editable="true"]')
+        ? target.closest<HTMLElement>("[data-outline-row]")
+        : null;
 
-      if (!isEditable && !tileTarget && !padTarget && !previewTarget) {
+      if (!isEditable && !tileTarget && !padTarget && !previewTarget && !outlineTarget) {
         event.preventDefault();
         return;
       }
@@ -80,6 +87,7 @@ export function ContextMenuProvider({ children }: { children: React.ReactNode })
       }
       selectionRef.current = selection;
       previewTargetRef.current = previewTarget;
+      outlineTargetRef.current = outlineTarget;
 
       if (tileTarget) {
         editableTargetRef.current = null;
@@ -94,16 +102,22 @@ export function ContextMenuProvider({ children }: { children: React.ReactNode })
         return;
       }
 
-      editableTargetRef.current = isEditable ? target : null;
+      editableTargetRef.current = isEditable
+        ? target
+        : (outlineTarget?.querySelector("textarea") ?? null);
       setMenuClosing(false);
       setMenu({
         x: event.clientX,
         y: event.clientY,
         hasSelection: selection.length > 0,
-        type: isEditable ? "edit" : padTarget ? "pad" : "preview",
+        type: isEditable || outlineTarget ? "edit" : padTarget ? "pad" : "preview",
         padMode: padTarget?.dataset.padMode,
         canInsertTask:
-          target instanceof HTMLTextAreaElement && !target.disabled && !target.readOnly,
+          !outlineTarget &&
+          target instanceof HTMLTextAreaElement &&
+          !target.disabled &&
+          !target.readOnly,
+        outlineKind: outlineTarget?.dataset.outlineKind as OutlineNode["kind"] | undefined,
       });
     }
 
@@ -204,6 +218,11 @@ export function ContextMenuProvider({ children }: { children: React.ReactNode })
     dismissMenu();
   };
 
+  const runOutlineTypeAction = (kind: OutlineNode["kind"]) => {
+    if (outlineTargetRef.current) requestOutlineNodeType(outlineTargetRef.current, kind);
+    dismissMenu();
+  };
+
   const items = useMemo(
     () =>
       menu
@@ -257,6 +276,23 @@ export function ContextMenuProvider({ children }: { children: React.ReactNode })
                       shortcut: "Ctrl+A",
                       action: () => runCommand("selectAll"),
                       disabled: false,
+                    },
+                  ]
+                : []),
+              ...(menu.outlineKind
+                ? [
+                    { separator: true as const },
+                    {
+                      label: t("outline.toBullet", { defaultValue: "转换为普通条目" }),
+                      shortcut: menu.outlineKind === "todo" ? "Ctrl+Shift+T" : "",
+                      action: () => runOutlineTypeAction("bullet"),
+                      disabled: menu.outlineKind === "bullet",
+                    },
+                    {
+                      label: t("outline.toTodo", { defaultValue: "转换为待办" }),
+                      shortcut: menu.outlineKind === "bullet" ? "Ctrl+Shift+T" : "",
+                      action: () => runOutlineTypeAction("todo"),
+                      disabled: menu.outlineKind === "todo",
                     },
                   ]
                 : []),

@@ -1,3 +1,4 @@
+use super::tags::extract_tags;
 use crate::json_io::write_json_atomic;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -34,6 +35,8 @@ pub struct AppConfig {
     pub close_to_tray: bool,
     pub autostart: bool,
     pub default_view_mode: String,
+    #[serde(default)]
+    pub compact_note_list: bool,
     #[serde(default = "default_note_auto_save")]
     pub note_auto_save: bool,
     #[serde(default = "default_note_surface_auto_save")]
@@ -44,6 +47,8 @@ pub struct AppConfig {
     pub tile_color_mode: String,
     #[serde(default = "default_tile_color_presets")]
     pub tile_color_presets: Vec<String>,
+    #[serde(default)]
+    pub tile_background_transparency: u32,
     #[serde(default = "default_theme")]
     pub theme: String,
     #[serde(default)]
@@ -52,6 +57,8 @@ pub struct AppConfig {
     pub font_size: u32,
     #[serde(default = "default_surface_font_size")]
     pub surface_font_size: u32,
+    #[serde(default = "default_tile_line_height")]
+    pub tile_line_height: f64,
     #[serde(default = "default_tab_indent_size")]
     pub tab_indent_size: u32,
     #[serde(default = "default_external_file_auto_save")]
@@ -99,13 +106,43 @@ pub struct AppConfig {
     pub last_known_base_dir: Option<String>,
 }
 
+#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub enum NoteType {
+    #[default]
+    Text,
+    List,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub enum OutlineKind {
+    Bullet,
+    Todo,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct OutlineNode {
+    pub id: String,
+    pub text: String,
+    pub depth: usize,
+    pub kind: OutlineKind,
+    pub checked: bool,
+    pub collapsed: bool,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct SaveNoteRequest {
     pub title: String,
     pub content: String,
     #[serde(default)]
     pub category: String,
+    #[serde(default)]
+    pub note_type: Option<NoteType>,
+    #[serde(default)]
+    pub outline_nodes: Option<Vec<OutlineNode>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -120,6 +157,13 @@ pub struct NoteMetadata {
     pub updated_at: DateTime<Utc>,
     pub word_count: usize,
     pub preview: String,
+    #[serde(default)]
+    pub note_type: NoteType,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub outline_nodes: Option<Vec<OutlineNode>>,
+    // None identifies pre-tag metadata; Some([]) is a cached untagged note.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tags: Option<Vec<String>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tile_color: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -138,6 +182,12 @@ pub struct Note {
     pub updated_at: DateTime<Utc>,
     pub word_count: usize,
     pub content: String,
+    #[serde(default)]
+    pub note_type: NoteType,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub outline_nodes: Option<Vec<OutlineNode>>,
+    #[serde(default)]
+    pub tags: Vec<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tile_color: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -730,7 +780,9 @@ impl NoteStore {
         self.migrate_data_dir_if_relocated(&mut config);
         config.data_dir = Some(self.data_dir.to_string_lossy().to_string());
         config.tab_indent_size = config.tab_indent_size.clamp(1, 8);
+        config.tile_line_height = normalize_tile_line_height(config.tile_line_height);
         config.tile_color_presets = normalize_tile_color_presets(&config.tile_color_presets);
+        config.tile_background_transparency = config.tile_background_transparency.min(80);
         write_json_atomic(&path, &config)?;
         fs::create_dir_all(self.data_dir.join("notes"))?;
         if self.migrate_macos_shortcut_default(&mut config)? {
@@ -743,7 +795,9 @@ impl NoteStore {
         self.ensure_config_dir()?;
         config.data_dir = Some(self.data_dir.to_string_lossy().to_string());
         config.tab_indent_size = config.tab_indent_size.clamp(1, 8);
+        config.tile_line_height = normalize_tile_line_height(config.tile_line_height);
         config.tile_color_presets = normalize_tile_color_presets(&config.tile_color_presets);
+        config.tile_background_transparency = config.tile_background_transparency.min(80);
         is_safe_data_dir(&self.data_dir)?;
         fs::create_dir_all(self.data_dir.join("notes"))?;
         write_json_atomic(&self.config_path(), &config)?;
@@ -752,7 +806,21 @@ impl NoteStore {
 
     pub fn list_notes(&self) -> Result<Vec<NoteMetadata>, AppError> {
         self.ensure_storage()?;
-        let mut metadata = self.load_metadata()?.notes;
+        let mut metadata_file = self.load_metadata()?;
+        let mut backfilled = false;
+        for note in &mut metadata_file.notes {
+            if note.tags.is_none() {
+                let path = self.note_path_in_category(&note.file_name, &note.category);
+                if path.exists() {
+                    note.tags = Some(extract_tags(&fs::read_to_string(path)?));
+                    backfilled = true;
+                }
+            }
+        }
+        if backfilled {
+            self.save_metadata(&metadata_file)?;
+        }
+        let mut metadata = metadata_file.notes;
         metadata.retain(|note| {
             self.note_path_in_category(&note.file_name, &note.category)
                 .exists()
@@ -777,11 +845,15 @@ impl NoteStore {
             word_count: metadata.word_count,
             tile_color: metadata.tile_color,
             tile_accent_color: metadata.tile_accent_color,
+            note_type: metadata.note_type,
+            outline_nodes: metadata.outline_nodes,
+            tags: extract_tags(&content),
             content,
         })
     }
 
-    pub fn create_note(&self, request: SaveNoteRequest) -> Result<Note, AppError> {
+    pub fn create_note(&self, mut request: SaveNoteRequest) -> Result<Note, AppError> {
+        prepare_outline(&mut request)?;
         self.ensure_storage()?;
         let id = Uuid::new_v4().to_string();
         let now = Utc::now();
@@ -801,6 +873,9 @@ impl NoteStore {
             updated_at: now,
             word_count,
             preview: preview(&request.content),
+            note_type: request.note_type.unwrap_or_default(),
+            outline_nodes: request.outline_nodes.clone(),
+            tags: Some(extract_tags(&request.content)),
             tile_color: None,
             tile_accent_color: None,
         };
@@ -818,13 +893,16 @@ impl NoteStore {
             created_at: now,
             updated_at: now,
             word_count,
+            tags: metadata.tags.unwrap_or_default(),
             content: request.content,
+            note_type: metadata.note_type,
+            outline_nodes: metadata.outline_nodes,
             tile_color: None,
             tile_accent_color: None,
         })
     }
 
-    pub fn update_note(&self, id: &str, request: SaveNoteRequest) -> Result<Note, AppError> {
+    pub fn update_note(&self, id: &str, mut request: SaveNoteRequest) -> Result<Note, AppError> {
         self.ensure_storage()?;
         let mut metadata_file = self.load_metadata()?;
         let note = metadata_file
@@ -832,6 +910,17 @@ impl NoteStore {
             .iter_mut()
             .find(|note| note.id == id)
             .ok_or_else(|| AppError::note_not_found(id))?;
+
+        request.note_type = Some(request.note_type.unwrap_or(note.note_type));
+        if request.outline_nodes.is_none()
+            && note
+                .outline_nodes
+                .as_ref()
+                .is_some_and(|nodes| outline_markdown(nodes) == request.content)
+        {
+            request.outline_nodes = note.outline_nodes.clone();
+        }
+        prepare_outline(&mut request)?;
 
         let old_file_name = note.file_name.clone();
         let old_category = note.category.clone();
@@ -855,6 +944,9 @@ impl NoteStore {
         note.updated_at = now;
         note.word_count = word_count;
         note.preview = preview(&request.content);
+        note.tags = Some(extract_tags(&request.content));
+        note.note_type = request.note_type.unwrap_or_default();
+        note.outline_nodes = request.outline_nodes;
 
         let result = Note {
             id: note.id.clone(),
@@ -864,7 +956,10 @@ impl NoteStore {
             created_at: note.created_at,
             updated_at: note.updated_at,
             word_count: note.word_count,
+            tags: note.tags.clone().unwrap_or_default(),
             content: request.content,
+            note_type: note.note_type,
+            outline_nodes: note.outline_nodes.clone(),
             tile_color: note.tile_color.clone(),
             tile_accent_color: note.tile_accent_color.clone(),
         };
@@ -1018,6 +1113,7 @@ impl NoteStore {
             title,
             content,
             category: category.to_string(),
+            ..Default::default()
         })
     }
 
@@ -1189,15 +1285,18 @@ impl NoteStore {
             close_to_tray: true,
             autostart: false,
             default_view_mode: "split".into(),
+            compact_note_list: false,
             note_auto_save: true,
             note_surface_auto_save: true,
             tile_color: default_tile_color(),
             tile_color_mode: default_tile_color_mode(),
             tile_color_presets: default_tile_color_presets(),
+            tile_background_transparency: 0,
             theme: default_theme(),
             font_family: String::new(),
             font_size: default_font_size(),
             surface_font_size: default_surface_font_size(),
+            tile_line_height: default_tile_line_height(),
             tab_indent_size: default_tab_indent_size(),
             external_file_auto_save: default_external_file_auto_save(),
             background_image_path: String::new(),
@@ -1392,8 +1491,26 @@ impl NoteStore {
             return Ok(rebuilt);
         }
 
-        match serde_json::from_str(&fs::read_to_string(&path)?) {
-            Ok(metadata) => Ok(metadata),
+        match serde_json::from_str::<MetadataFile>(&fs::read_to_string(&path)?) {
+            Ok(mut metadata) => {
+                let mut changed = false;
+                for note in &mut metadata.notes {
+                    let accent = note
+                        .tile_color
+                        .as_deref()
+                        .and_then(normalize_hex_color)
+                        .as_deref()
+                        .map(derive_tile_accent_color);
+                    if note.tile_accent_color != accent {
+                        note.tile_accent_color = accent;
+                        changed = true;
+                    }
+                }
+                if changed {
+                    self.save_metadata(&metadata)?;
+                }
+                Ok(metadata)
+            }
             Err(_) => {
                 // 备份损坏文件再重建：rebuild 从文件系统推断 created_at / 分类，
                 // 与原始数据可能不一致，保留原件供事后取证分析
@@ -1491,6 +1608,9 @@ impl NoteStore {
                 updated_at: modified,
                 word_count: count_words(&content),
                 preview: preview(&content),
+                note_type: NoteType::Text,
+                outline_nodes: None,
+                tags: Some(extract_tags(&content)),
                 tile_color: None,
                 tile_accent_color: None,
             });
@@ -1737,8 +1857,60 @@ fn default_note_surface_auto_save() -> bool {
     true
 }
 
-// Shared with getTileAccentColor in the frontend for legacy/inherited colors.
-// Blend toward black or white without changing hue, using rounded RGB channels.
+fn outline_markdown(nodes: &[OutlineNode]) -> String {
+    nodes
+        .iter()
+        .map(|node| {
+            let indent = "  ".repeat(node.depth);
+            let marker = match node.kind {
+                OutlineKind::Bullet => "- ",
+                OutlineKind::Todo if node.checked => "- [x] ",
+                OutlineKind::Todo => "- [ ] ",
+            };
+            let mut lines = node.text.split('\n');
+            let mut text = format!("{indent}{marker}{}", lines.next().unwrap_or_default());
+            for line in lines {
+                text.push_str(&format!("\n{indent}  {line}"));
+            }
+            text
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+fn prepare_outline(request: &mut SaveNoteRequest) -> Result<(), AppError> {
+    if request.note_type.unwrap_or_default() != NoteType::List {
+        request.outline_nodes = None;
+        return Ok(());
+    }
+    if let Some(nodes) = &request.outline_nodes {
+        let mut ids = std::collections::HashSet::new();
+        let mut previous_depth = 0;
+        if nodes.is_empty() {
+            return Err(AppError::new(
+                "invalidOutline",
+                "Outline must contain a node",
+            ));
+        }
+        for (index, node) in nodes.iter().enumerate() {
+            if node.id.is_empty()
+                || !ids.insert(&node.id)
+                || (index == 0 && node.depth != 0)
+                || node.depth > previous_depth + 1
+            {
+                return Err(AppError::new(
+                    "invalidOutline",
+                    "Invalid outline hierarchy or node ID",
+                ));
+            }
+            previous_depth = node.depth;
+        }
+        request.content = outline_markdown(nodes);
+    }
+    Ok(())
+}
+
+// Shared with getTileAccentColor: preserve HSL hue/saturation, adjusting lightness.
 fn derive_tile_accent_color(background: &str) -> String {
     let channels: [u8; 3] =
         [1, 3, 5].map(|offset| u8::from_str_radix(&background[offset..offset + 2], 16).unwrap());
@@ -1758,12 +1930,30 @@ fn derive_tile_accent_color(background: &str) -> String {
             .sum()
     }
     let base = luminance(channels);
-    let target = if base > 0.179 { 0.0 } else { 255.0 };
+    let rgb = channels.map(|channel| f64::from(channel) / 255.0);
+    let min = rgb.into_iter().fold(f64::INFINITY, f64::min);
+    let max = rgb.into_iter().fold(f64::NEG_INFINITY, f64::max);
+    let delta = max - min;
+    let lightness = (max + min) / 2.0;
+    let saturation = if delta == 0.0 {
+        0.0
+    } else {
+        delta / (1.0 - (2.0 * lightness - 1.0).abs())
+    };
+    let hue_channels = rgb.map(|channel| {
+        if delta == 0.0 {
+            0.0
+        } else {
+            (channel - min) / delta
+        }
+    });
+    let target = if base > 0.179 { 0.0 } else { 1.0 };
     for step in 1..=100 {
-        let candidate = channels.map(|channel| {
-            (f64::from(channel) + (target - f64::from(channel)) * f64::from(step) / 100.0).round()
-                as u8
-        });
+        let next_lightness = lightness + (target - lightness) * f64::from(step) / 100.0;
+        let chroma = (1.0 - (2.0 * next_lightness - 1.0).abs()) * saturation;
+        let offset = next_lightness - chroma / 2.0;
+        let candidate =
+            hue_channels.map(|channel| ((offset + chroma * channel) * 255.0).round() as u8);
         let accent = luminance(candidate);
         if (base.max(accent) + 0.05) / (base.min(accent) + 0.05) >= 4.5 {
             return format!(
@@ -1840,6 +2030,18 @@ fn default_surface_font_size() -> u32 {
     14
 }
 
+fn default_tile_line_height() -> f64 {
+    1.8
+}
+
+fn normalize_tile_line_height(value: f64) -> f64 {
+    if value.is_finite() {
+        value.clamp(1.0, 3.0)
+    } else {
+        default_tile_line_height()
+    }
+}
+
 fn default_tab_indent_size() -> u32 {
     2
 }
@@ -1897,6 +2099,116 @@ mod tests {
     use super::*;
     use std::{fs, path::PathBuf};
 
+    #[test]
+    fn outline_nodes_survive_reload_and_legacy_save_and_convert_to_text() {
+        let store = test_store("outline-round-trip");
+        let nodes = vec![
+            OutlineNode {
+                id: "root".into(),
+                text: "项目".into(),
+                depth: 0,
+                kind: OutlineKind::Bullet,
+                checked: false,
+                collapsed: true,
+            },
+            OutlineNode {
+                id: "task".into(),
+                text: "待办\n中文说明".into(),
+                depth: 1,
+                kind: OutlineKind::Todo,
+                checked: true,
+                collapsed: false,
+            },
+        ];
+        let note = store
+            .create_note(SaveNoteRequest {
+                title: "大纲".into(),
+                note_type: Some(NoteType::List),
+                outline_nodes: Some(nodes.clone()),
+                ..Default::default()
+            })
+            .unwrap();
+        assert_eq!(note.content, "- 项目\n  - [x] 待办\n    中文说明");
+        assert_eq!(
+            store.read_note(&note.id).unwrap().outline_nodes,
+            Some(nodes.clone())
+        );
+        assert_eq!(store.list_notes().unwrap()[0].note_type, NoteType::List);
+        let saved = store
+            .update_note(
+                &note.id,
+                SaveNoteRequest {
+                    title: "Renamed".into(),
+                    content: note.content.clone(),
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+        assert_eq!(saved.outline_nodes, Some(nodes));
+        let text = store
+            .update_note(
+                &note.id,
+                SaveNoteRequest {
+                    title: saved.title,
+                    content: saved.content.clone(),
+                    note_type: Some(NoteType::Text),
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+        assert_eq!(text.note_type, NoteType::Text);
+        assert_eq!(text.outline_nodes, None);
+        assert_eq!(text.content, note.content);
+    }
+
+    #[test]
+    fn outline_rejects_orphans_and_duplicate_ids_and_defaults_legacy_metadata() {
+        let store = test_store("outline-validation");
+        let root = OutlineNode {
+            id: "root".into(),
+            text: "root".into(),
+            depth: 0,
+            kind: OutlineKind::Bullet,
+            checked: false,
+            collapsed: false,
+        };
+        for nodes in [
+            vec![OutlineNode {
+                depth: 1,
+                ..root.clone()
+            }],
+            vec![root.clone(), root.clone()],
+            vec![
+                root.clone(),
+                OutlineNode {
+                    id: "child".into(),
+                    depth: 2,
+                    ..root.clone()
+                },
+            ],
+        ] {
+            assert!(store
+                .create_note(SaveNoteRequest {
+                    note_type: Some(NoteType::List),
+                    outline_nodes: Some(nodes),
+                    ..Default::default()
+                })
+                .is_err());
+        }
+        let note = store
+            .create_note(SaveNoteRequest {
+                content: "legacy".into(),
+                ..Default::default()
+            })
+            .unwrap();
+        assert_eq!(note.note_type, NoteType::Text);
+        let mut value = serde_json::to_value(store.list_notes().unwrap()[0].clone()).unwrap();
+        value.as_object_mut().unwrap().remove("noteType");
+        let metadata: NoteMetadata = serde_json::from_value(value).unwrap();
+        assert_eq!(metadata.note_type, NoteType::Text);
+        assert!(metadata.outline_nodes.is_none());
+    }
+
     fn test_root(name: &str) -> PathBuf {
         let base = std::env::var_os("FLORAL_NOTEPAPER_TEST_TEMP_DIR")
             .map(PathBuf::from)
@@ -1921,6 +2233,84 @@ mod tests {
     }
 
     #[test]
+    fn tags_survive_save_reload_move_and_removal() {
+        let store = test_store("tag-round-trip");
+        let note = store
+            .create_note(SaveNoteRequest {
+                title: "Tagged".into(),
+                content: "# 标题\n正文 #工作 #读书 #工作".into(),
+                category: String::new(),
+                ..Default::default()
+            })
+            .unwrap();
+        assert_eq!(note.tags, vec!["工作", "读书"]);
+        assert_eq!(store.list_notes().unwrap()[0].tags, Some(note.tags.clone()));
+        store.create_category("Work").unwrap();
+        store.move_note_to_category(&note.id, "Work").unwrap();
+        let reloaded = NoteStore::new(store.config_dir.clone(), store.data_dir.clone());
+        assert_eq!(
+            reloaded.read_note(&note.id).unwrap().tags,
+            vec!["工作", "读书"]
+        );
+        let saved = reloaded
+            .update_note(
+                &note.id,
+                SaveNoteRequest {
+                    title: "Tagged".into(),
+                    content: "# 标题\n正文".into(),
+                    category: "Work".into(),
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+        assert!(saved.tags.is_empty());
+        assert_eq!(reloaded.list_notes().unwrap()[0].tags, Some(vec![]));
+        assert!(reloaded.read_note(&note.id).unwrap().tags.is_empty());
+    }
+
+    #[test]
+    fn old_metadata_tags_are_backfilled_from_full_markdown_without_changing_notes() {
+        let store = test_store("tag-backfill");
+        let content = format!("{}\n#旧标签", "正文 ".repeat(60));
+        let note = store
+            .create_note(SaveNoteRequest {
+                title: "Legacy".into(),
+                content: content.clone(),
+                category: String::new(),
+                ..Default::default()
+            })
+            .unwrap();
+        let mut old_metadata: serde_json::Value =
+            serde_json::from_str(&fs::read_to_string(store.metadata_path()).unwrap()).unwrap();
+        old_metadata["notes"][0]
+            .as_object_mut()
+            .unwrap()
+            .remove("tags");
+        write_json_atomic(&store.metadata_path(), &old_metadata).unwrap();
+        let listed = store.list_notes().unwrap();
+        assert_eq!(listed[0].tags, Some(vec!["旧标签".into()]));
+        assert_eq!(listed[0].updated_at, note.updated_at);
+        assert!(!listed[0].preview.contains("旧标签"));
+        assert_eq!(store.read_note(&note.id).unwrap().content, content);
+        assert_eq!(store.load_metadata().unwrap().notes[0].tags, listed[0].tags);
+    }
+
+    #[test]
+    fn imported_and_rebuilt_notes_extract_tags_without_rewriting_markdown() {
+        let store = test_store("tag-import-rebuild");
+        let source = store.data_dir.join("source.md");
+        let content = "# 标题\n正文 #导入\n`#代码`";
+        fs::write(&source, content).unwrap();
+        let note = store.import_markdown_file(&source, "").unwrap();
+        assert_eq!(note.tags, vec!["导入"]);
+        let exported = store.data_dir.join("exported.md");
+        store.export_markdown_file(&note.id, &exported).unwrap();
+        assert_eq!(fs::read_to_string(exported).unwrap(), content);
+        let rebuilt = store.rebuild_metadata().unwrap();
+        assert_eq!(rebuilt.notes[0].tags, Some(vec!["导入".into()]));
+    }
+
+    #[test]
     fn creates_updates_reads_and_deletes_markdown_notes() {
         let store = test_store("crud");
 
@@ -1929,6 +2319,7 @@ mod tests {
                 title: "A/B:Test".into(),
                 content: "hello\nworld".into(),
                 category: String::new(),
+                ..Default::default()
             })
             .expect("create note");
 
@@ -1953,6 +2344,7 @@ mod tests {
                     title: "".into(),
                     content: "# 新标题\nsecond line".into(),
                     category: String::new(),
+                    ..Default::default()
                 },
             )
             .expect("update note");
@@ -1974,6 +2366,7 @@ mod tests {
                 title: "First".into(),
                 content: "Original draft".into(),
                 category: String::new(),
+                ..Default::default()
             })
             .unwrap();
         let second = store
@@ -1981,6 +2374,7 @@ mod tests {
                 title: "Second".into(),
                 content: "Independent note".into(),
                 category: String::new(),
+                ..Default::default()
             })
             .unwrap();
         let colored = store
@@ -2004,6 +2398,7 @@ mod tests {
                     title: "Renamed".into(),
                     content: "Saved draft".into(),
                     category: String::new(),
+                    ..Default::default()
                 },
             )
             .unwrap();
@@ -2043,6 +2438,7 @@ mod tests {
                 title: "Legacy".into(),
                 content: "Hello".into(),
                 category: String::new(),
+                ..Default::default()
             })
             .unwrap();
         let json = serde_json::to_value(store.list_notes().unwrap()).unwrap();
@@ -2059,6 +2455,7 @@ mod tests {
                 title: "第一条".into(),
                 content: "# 第一条\n正文".into(),
                 category: String::new(),
+                ..Default::default()
             })
             .expect("create first");
         let second = store
@@ -2066,6 +2463,7 @@ mod tests {
                 title: "第二条".into(),
                 content: "第二条正文".into(),
                 category: String::new(),
+                ..Default::default()
             })
             .expect("create second");
 
@@ -2105,8 +2503,10 @@ mod tests {
         assert_eq!(default_config.global_shortcut, "Ctrl+Space");
         assert!(default_config.note_auto_save);
         assert!(default_config.note_surface_auto_save);
+        assert!(!default_config.compact_note_list);
         assert_eq!(default_config.tile_color, "#f6f3ec");
         assert_eq!(default_config.tile_color_mode, "system");
+        assert_eq!(default_config.tile_background_transparency, 0);
         assert!(!default_config.tile_double_click_to_edit);
         assert!(!default_config.tile_save_returns_to_pin);
         assert_eq!(default_config.theme, "system");
@@ -2124,15 +2524,18 @@ mod tests {
             close_to_tray: false,
             autostart: true,
             default_view_mode: "preview".into(),
+            compact_note_list: true,
             note_auto_save: false,
             note_surface_auto_save: false,
             tile_color: "#efe8dc".into(),
             tile_color_mode: "custom".into(),
             tile_color_presets: default_tile_color_presets(),
             theme: "dark".into(),
+            tile_background_transparency: 45,
             font_family: "Microsoft YaHei".into(),
             font_size: 16,
             surface_font_size: 16,
+            tile_line_height: 1.8,
             tab_indent_size: 2,
             external_file_auto_save: true,
             background_image_path: String::new(),
@@ -2165,6 +2568,27 @@ mod tests {
     }
 
     #[test]
+    fn tile_background_transparency_is_clamped_on_save_and_load() {
+        let store = test_store("tile-background-transparency");
+        let mut config = store.default_config();
+        config.tile_background_transparency = 100;
+        let saved = store.save_config(config.clone()).expect("save config");
+        assert_eq!(saved.tile_background_transparency, 80);
+        assert_eq!(
+            store.load_config().unwrap().tile_background_transparency,
+            80
+        );
+        write_json_atomic(&store.config_path(), &config).expect("write excessive transparency");
+        assert_eq!(
+            store.load_config().unwrap().tile_background_transparency,
+            80
+        );
+        let persisted: AppConfig =
+            serde_json::from_str(&fs::read_to_string(store.config_path()).unwrap()).unwrap();
+        assert_eq!(persisted.tile_background_transparency, 80);
+    }
+
+    #[test]
     fn edited_quick_colors_persist_by_slot_without_recoloring_notes() {
         let store = test_store("color-presets");
         let note = store
@@ -2172,6 +2596,7 @@ mod tests {
                 title: "Pinned note".into(),
                 content: "Keep this content".into(),
                 category: String::new(),
+                ..Default::default()
             })
             .unwrap();
         store
@@ -2265,12 +2690,14 @@ mod tests {
         .expect("write legacy config");
 
         let loaded = store.load_config().expect("load legacy config");
+        assert!(!loaded.compact_note_list);
         assert_eq!(loaded.font_family, "");
 
         assert!(loaded.note_auto_save);
         assert!(loaded.note_surface_auto_save);
         assert_eq!(loaded.tile_color, "#f6f3ec");
         assert_eq!(loaded.tile_color_mode, "system");
+        assert_eq!(loaded.tile_background_transparency, 0);
         assert_eq!(loaded.tile_color_presets, default_tile_color_presets());
         assert!(!loaded.tile_double_click_to_edit);
         assert!(!loaded.tile_save_returns_to_pin);
@@ -2446,6 +2873,7 @@ mod tests {
                 title: "重定位".into(),
                 content: "# 重定位\n正文".into(),
                 category: String::new(),
+                ..Default::default()
             })
             .expect("create note in old dir");
         old_store.load_config().expect("persist old config");
@@ -2483,6 +2911,7 @@ mod tests {
                 title: "旧数据".into(),
                 content: "旧正文".into(),
                 category: String::new(),
+                ..Default::default()
             })
             .expect("create old note");
         old_store.load_config().expect("persist old config");
@@ -2494,6 +2923,7 @@ mod tests {
                 title: "新数据".into(),
                 content: "新正文".into(),
                 category: String::new(),
+                ..Default::default()
             })
             .expect("create new note");
 
@@ -2521,6 +2951,7 @@ mod tests {
                 title: "迁移测试".into(),
                 content: "# 迁移测试\n正文".into(),
                 category: String::new(),
+                ..Default::default()
             })
             .expect("create note");
 
@@ -2560,6 +2991,7 @@ mod tests {
                 title: "防护测试".into(),
                 content: "正文".into(),
                 category: String::new(),
+                ..Default::default()
             })
             .expect("create note");
 
@@ -2725,6 +3157,7 @@ mod tests {
                 title: "导出标题".into(),
                 content: content.into(),
                 category: String::new(),
+                ..Default::default()
             })
             .expect("create note");
         let export_path = root.join("exports").join("导出.md");

@@ -28,11 +28,16 @@ import {
 import type { ResizeDirection } from "../features/windows/controls";
 import { getConfig } from "../features/settings/api";
 import {
+  DEFAULT_TILE_LINE_HEIGHT,
+  normalizeTileLineHeight,
+} from "../features/settings/tileLineHeight";
+import {
   DEFAULT_TILE_COLOR,
   normalizeTileColor,
   resolveTileColor,
   resolveNoteTileColor,
   normalizeTileColorPresets,
+  normalizeTileBackgroundTransparency,
 } from "../features/settings/tileColor";
 import type { TileColorMode } from "../features/settings/types";
 import {
@@ -54,8 +59,14 @@ import {
   tileSurfaceModeUnpinNoteId,
 } from "../features/windows/tileWindowEvents";
 import { NotepadOpenPanel } from "./NotepadOpenPanel";
+import { NoteTagHint } from "./NoteTags";
+import { TagAutocomplete } from "./TagAutocomplete";
+import { applyTextareaTagCompletion } from "../features/notes/tagCompletion";
 import { Tile } from "./Tile";
 import { NoteColorPicker } from "./NoteColorPicker";
+import { OutlineEditor, type OutlineEditorHandle } from "./OutlineEditor";
+import { NoteTypeSelect } from "./NoteTypeSelect";
+import { useOutlineNote } from "../features/notes/useOutlineNote";
 import { setTileEdgeHide } from "../features/windows/tileEdgeHide";
 import { useTileEdgeHide } from "../features/windows/useTileEdgeHide";
 
@@ -136,6 +147,7 @@ export function NotePad({
   const [surfaceMode, setSurfaceMode] = useState<NoteSurfaceMode>(initialSurfaceMode);
   const [mode, setMode] = useState<OpenMode>("new");
   const [notes, setNotes] = useState<NoteMetadata[]>([]);
+  const knownTags = useMemo(() => notes.flatMap((note) => note.tags ?? []), [notes]);
   const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
@@ -145,6 +157,9 @@ export function NotePad({
   const [tileColorMode, setTileColorMode] = useState<TileColorMode>("system");
   const [tileColorPresets, setTileColorPresets] = useState(() => normalizeTileColorPresets());
   const [surfaceFontSize, setSurfaceFontSize] = useState(14);
+  const [tileLineHeight, setTileLineHeight] = useState(DEFAULT_TILE_LINE_HEIGHT);
+  const [tileBackgroundTransparency, setTileBackgroundTransparency] = useState(0);
+  const [compactNoteList, setCompactNoteList] = useState(false);
   const [tileRenderMarkdown, setTileRenderMarkdown] = useState(false);
   const [tileDoubleClickToEdit, setTileDoubleClickToEdit] = useState(false);
   const [tileSaveReturnsToPin, setTileSaveReturnsToPin] = useState(false);
@@ -159,6 +174,17 @@ export function NotePad({
   const closeColorPicker = useCallback(() => setColorPickerOpen(false), []);
   const titleRef = useRef<HTMLInputElement>(null);
   const contentRef = useRef<HTMLTextAreaElement>(null);
+  const outlineEditorRef = useRef<OutlineEditorHandle>(null);
+  const outline = useOutlineNote((value) => {
+    contentValueRef.current = value;
+    setContent(value);
+    statusRef.current = "dirty";
+    setStatus("dirty");
+  });
+  const focusContent = useCallback(() => {
+    if (outline.snapshot.current.noteType === "list") outlineEditorRef.current?.focus();
+    else contentRef.current?.focus();
+  }, [outline.snapshot]);
   const tileDragIntentRef = useRef<{ x: number; y: number } | null>(null);
   const windowLabelRef = useRef("");
   const statusRef = useRef<NotePadStatus>("empty");
@@ -171,6 +197,7 @@ export function NotePad({
   const notesRef = useRef(notes);
   notesRef.current = notes;
   const saveQueueRef = useRef<Promise<unknown>>(Promise.resolve());
+  const noteSyncEpochRef = useRef(0);
   const tileColorModeRef = useRef(tileColorMode);
   tileColorModeRef.current = tileColorMode;
   const tileColorRawRef = useRef(tileColorRaw);
@@ -205,19 +232,24 @@ export function NotePad({
     return loadedNotes;
   }, []);
 
-  const applyNote = useCallback((note: Note) => {
-    setNoteTileColor(note.tileColor);
-    setNoteTileAccentColor(note.tileAccentColor);
-    setColorPickerOpen(false);
-    editingNoteIdRef.current = note.id;
-    titleValueRef.current = note.title;
-    contentValueRef.current = note.content;
-    setEditingNoteId(note.id);
-    setTitle(note.title);
-    setContent(note.content);
-    setMode("new");
-    setStatus("opened");
-  }, []);
+  const applyNote = useCallback(
+    (note: Note) => {
+      noteSyncEpochRef.current += 1;
+      setNoteTileColor(note.tileColor);
+      setNoteTileAccentColor(note.tileAccentColor);
+      setColorPickerOpen(false);
+      editingNoteIdRef.current = note.id;
+      titleValueRef.current = note.title;
+      contentValueRef.current = note.content;
+      setEditingNoteId(note.id);
+      setTitle(note.title);
+      setContent(note.content);
+      outline.load(note);
+      setMode("new");
+      setStatus("opened");
+    },
+    [outline.load],
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -228,6 +260,11 @@ export function NotePad({
         if (!cancelled) {
           setNoteSurfaceAutoSave(loadedConfig.noteSurfaceAutoSave);
           setSurfaceFontSize(loadedConfig.surfaceFontSize ?? 14);
+          setTileLineHeight(normalizeTileLineHeight(loadedConfig.tileLineHeight));
+          setTileBackgroundTransparency(
+            normalizeTileBackgroundTransparency(loadedConfig.tileBackgroundTransparency),
+          );
+          setCompactNoteList(loadedConfig.compactNoteList ?? false);
           setTileRenderMarkdown(loadedConfig.tileRenderMarkdown ?? false);
           setTileDoubleClickToEdit(loadedConfig.tileDoubleClickToEdit ?? false);
           setTileSaveReturnsToPin(loadedConfig.tileSaveReturnsToPin ?? false);
@@ -254,13 +291,56 @@ export function NotePad({
   }, [applyNote, initialNoteId, refreshNotes]);
 
   useEffect(() => {
+    let cancelled = false;
     const unlisten = listen("notes-changed", () => {
+      const epoch = ++noteSyncEpochRef.current;
+      const noteId = editingNoteIdRef.current;
       void refreshNotes().catch(() => undefined);
+      if (!noteId || dormantRef.current) return;
+
+      const canSync = () =>
+        !cancelled &&
+        !dormantRef.current &&
+        noteSyncEpochRef.current === epoch &&
+        editingNoteIdRef.current === noteId &&
+        statusRef.current !== "dirty" &&
+        statusRef.current !== "saveFailed";
+
+      void (async () => {
+        // The backend emits before the save command resolves. Let this window's
+        // pending saves settle before reloading, so its own event stays clean.
+        await saveQueueRef.current;
+        if (!canSync()) return;
+        const queue = saveQueueRef.current;
+        const titleSnapshot = titleValueRef.current;
+        const contentSnapshot = contentValueRef.current;
+        const outlineSnapshot = outline.snapshot.current;
+        const note = await getNote(noteId);
+        if (
+          !canSync() ||
+          saveQueueRef.current !== queue ||
+          titleValueRef.current !== titleSnapshot ||
+          contentValueRef.current !== contentSnapshot ||
+          outline.snapshot.current !== outlineSnapshot
+        )
+          return;
+
+        titleValueRef.current = note.title;
+        contentValueRef.current = note.content;
+        statusRef.current = "saved";
+        setTitle(note.title);
+        setContent(note.content);
+        outline.load(note);
+        setNoteTileColor(note.tileColor);
+        setNoteTileAccentColor(note.tileAccentColor);
+        setStatus("saved");
+      })().catch(() => undefined);
     });
     return () => {
+      cancelled = true;
       void unlisten.then((fn) => fn());
     };
-  }, [refreshNotes]);
+  }, [refreshNotes, outline.load, outline.snapshot]);
 
   useEffect(() => {
     const unlisten = listen<NoteMetadata>("note-color-changed", (event) => {
@@ -293,7 +373,7 @@ export function NotePad({
         if (!cancelled) {
           hasEnteredOnce.current = true;
           void showCurrentWindow()
-            .then(() => contentRef.current?.focus())
+            .then(focusContent)
             .catch(() => undefined);
         }
       });
@@ -309,6 +389,9 @@ export function NotePad({
       tileColorMode?: TileColorMode;
       tileColorPresets?: string[];
       surfaceFontSize?: number;
+      tileLineHeight?: number;
+      tileBackgroundTransparency?: number;
+      compactNoteList?: boolean;
       tileRenderMarkdown?: boolean;
       tileDoubleClickToEdit?: boolean;
       tileSaveReturnsToPin?: boolean;
@@ -321,6 +404,13 @@ export function NotePad({
       if (event.payload.tileColorPresets != null)
         setTileColorPresets(normalizeTileColorPresets(event.payload.tileColorPresets));
       if (event.payload.surfaceFontSize != null) setSurfaceFontSize(event.payload.surfaceFontSize);
+      if (event.payload.tileLineHeight != null)
+        setTileLineHeight(normalizeTileLineHeight(event.payload.tileLineHeight));
+      if (event.payload.tileBackgroundTransparency != null)
+        setTileBackgroundTransparency(
+          normalizeTileBackgroundTransparency(event.payload.tileBackgroundTransparency),
+        );
+      if (event.payload.compactNoteList != null) setCompactNoteList(event.payload.compactNoteList);
       if (event.payload.tileRenderMarkdown != null)
         setTileRenderMarkdown(event.payload.tileRenderMarkdown);
       if (event.payload.tileDoubleClickToEdit != null)
@@ -360,19 +450,22 @@ export function NotePad({
       isStandby.current = false;
       dormantRef.current = false;
       hasEnteredOnce.current = true;
+      noteSyncEpochRef.current += 1;
+      editingNoteIdRef.current = null;
       setEditingNoteId(null);
       setNoteTileColor(undefined);
       setNoteTileAccentColor(undefined);
       setColorPickerOpen(false);
       setTitle("");
       setContent("");
+      outline.load();
       setMode("new");
       setStatus("empty");
       setIsExiting(false);
       setSurfaceMode("pad");
       void refreshNotes().catch(() => undefined);
       void showCurrentWindow()
-        .then(() => contentRef.current?.focus())
+        .then(focusContent)
         .catch(() => undefined);
     });
     return () => {
@@ -385,10 +478,12 @@ export function NotePad({
       const noteId = editingNoteIdRef.current;
       const titleSnapshot = titleValueRef.current;
       const contentSnapshot = contentValueRef.current;
+      const outlineSnapshot = outline.snapshot.current;
       const existingCategory = notesRef.current.find((n) => n.id === noteId)?.category ?? "";
       const request = {
         title: titleSnapshot,
         content: contentSnapshot,
+        ...outlineSnapshot,
         category: existingCategory,
       };
       const note = noteId ? await updateNote(noteId, request) : await createNote(request);
@@ -404,7 +499,9 @@ export function NotePad({
         return [...next].sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
       });
       const contentChanged =
-        contentValueRef.current !== contentSnapshot || titleValueRef.current !== titleSnapshot;
+        contentValueRef.current !== contentSnapshot ||
+        titleValueRef.current !== titleSnapshot ||
+        outline.snapshot.current !== outlineSnapshot;
       statusRef.current = contentChanged ? "dirty" : "saved";
       setStatus(contentChanged ? "dirty" : "saved");
       return note;
@@ -684,6 +781,7 @@ export function NotePad({
       setTitle("");
       setContent("");
       setNotes([]);
+      outline.load();
       setMode("new");
       setStatus("empty");
       setIsExiting(false);
@@ -789,7 +887,16 @@ export function NotePad({
     }, 900);
 
     return () => window.clearTimeout(timer);
-  }, [content, title, handleSave, hasDraftContent, noteSurfaceAutoSave, status]);
+  }, [
+    content,
+    title,
+    outline.nodes,
+    outline.noteType,
+    handleSave,
+    hasDraftContent,
+    noteSurfaceAutoSave,
+    status,
+  ]);
 
   const handleDrag = (event: MouseEvent<HTMLElement>) => {
     if (event.button !== 0) return;
@@ -832,9 +939,13 @@ export function NotePad({
         <Tile
           title={tileTitle || undefined}
           content={content}
+          outlineNodes={outline.noteType === "list" ? outline.nodes : undefined}
+          onOutlineChange={outline.changeNodes}
           color={resolveNoteTileColor(noteTileColor, tileColor)}
           accentColor={noteTileAccentColor}
+          backgroundTransparency={tileBackgroundTransparency}
           fontSize={surfaceFontSize}
+          lineHeight={tileLineHeight}
           renderMarkdown={
             tileRenderMarkdown ||
             /^[ \t]*(?:>[ \t]*)*(?:[-+*]|\d+[.)])[ \t]+\[[ xX]\](?:[ \t]+|$)/m.test(content)
@@ -935,6 +1046,10 @@ export function NotePad({
               </span>
 
               <div className="ml-auto flex items-center gap-1.5">
+                <NoteTypeSelect
+                  value={outline.noteType}
+                  onChange={(type) => outline.changeType(type, content)}
+                />
                 <button
                   onClick={() => void handlePin()}
                   className="group w-7 h-7 flex items-center justify-center rounded-lg transition-all duration-200 cursor-pointer text-ink-ghost hover:text-ink-faint hover:bg-paper-warm"
@@ -993,7 +1108,8 @@ export function NotePad({
                   onKeyDown={(event) => {
                     if (event.key === "Enter" || event.key === "ArrowDown") {
                       event.preventDefault();
-                      contentRef.current?.focus();
+                      if (outline.noteType === "list") outlineEditorRef.current?.focus();
+                      else contentRef.current?.focus();
                     }
                   }}
                   placeholder={t("notepad.placeholder.title", { defaultValue: "标题（可选）" })}
@@ -1001,38 +1117,66 @@ export function NotePad({
                   style={{ fontSize: `${surfaceFontSize}px` }}
                 />
 
-                <textarea
-                  ref={contentRef}
-                  data-tab-indent="true"
-                  value={content}
-                  onChange={(event) => {
-                    setContent(event.target.value);
-                    setStatus("dirty");
-                  }}
-                  onPaste={imagePasteHandler}
-                  onDrop={imageDropHandler}
-                  onDragOver={imageDragOverHandler}
-                  onKeyDown={(event) => {
-                    if (handleListEnter(event, setContent, () => setStatus("dirty"))) return;
-                    if (event.key === "ArrowUp") {
-                      const ta = contentRef.current;
-                      if (ta && ta.selectionStart === ta.selectionEnd) {
-                        const textBeforeCursor = content.slice(0, ta.selectionStart);
-                        if (!textBeforeCursor.includes("\n")) {
-                          event.preventDefault();
-                          titleRef.current?.focus();
-                        }
-                      }
+                {outline.noteType === "list" ? (
+                  <div className="flex-1 min-h-0 overflow-y-auto pb-2">
+                    <OutlineEditor
+                      ref={outlineEditorRef}
+                      nodes={outline.nodes}
+                      tags={knownTags}
+                      onChange={outline.changeNodes}
+                      fontSize={surfaceFontSize}
+                    />
+                  </div>
+                ) : (
+                  <TagAutocomplete
+                    tags={knownTags}
+                    className="flex flex-col flex-1 min-h-0"
+                    onComplete={(textarea, edit) =>
+                      applyTextareaTagCompletion(textarea, edit, (value) => {
+                        setContent(value);
+                        setStatus("dirty");
+                      })
                     }
-                  }}
-                  placeholder={t("notepad.placeholder.content", { defaultValue: "写点什么……" })}
-                  className="w-full flex-1 min-h-0 pb-2 leading-relaxed text-ink-soft font-body placeholder:text-ink-ghost/50"
-                  style={{ fontSize: `${surfaceFontSize}px`, tabSize: `var(--tab-indent-size, 2)` }}
-                />
+                  >
+                    <textarea
+                      ref={contentRef}
+                      data-tab-indent="true"
+                      value={content}
+                      onChange={(event) => {
+                        setContent(event.target.value);
+                        setStatus("dirty");
+                      }}
+                      onPaste={imagePasteHandler}
+                      onDrop={imageDropHandler}
+                      onDragOver={imageDragOverHandler}
+                      onKeyDown={(event) => {
+                        if (handleListEnter(event, setContent, () => setStatus("dirty"))) return;
+                        if (event.key === "ArrowUp") {
+                          const ta = contentRef.current;
+                          if (ta && ta.selectionStart === ta.selectionEnd) {
+                            const textBeforeCursor = content.slice(0, ta.selectionStart);
+                            if (!textBeforeCursor.includes("\n")) {
+                              event.preventDefault();
+                              titleRef.current?.focus();
+                            }
+                          }
+                        }
+                      }}
+                      placeholder={t("notepad.placeholder.content", { defaultValue: "写点什么……" })}
+                      className="w-full flex-1 min-h-0 pb-2 leading-relaxed text-ink-soft font-body placeholder:text-ink-ghost/50"
+                      style={{
+                        fontSize: `${surfaceFontSize}px`,
+                        tabSize: `var(--tab-indent-size, 2)`,
+                      }}
+                    />
+                  </TagAutocomplete>
+                )}
+                <NoteTagHint content={content} />
               </div>
             ) : (
               <NotepadOpenPanel
                 notes={notes}
+                compact={compactNoteList}
                 onOpenNote={(noteId) => void handleOpenNote(noteId)}
               />
             )}

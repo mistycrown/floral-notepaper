@@ -12,15 +12,18 @@ export interface AppConfig {
   closeToTray: boolean;
   autostart: boolean;
   defaultViewMode: string;
+  compactNoteList?: boolean;
   noteAutoSave: boolean;
   noteSurfaceAutoSave: boolean;
   tileColor: string;
   tileColorMode: TileColorMode;
   tileColorPresets?: string[];
+  tileBackgroundTransparency?: number;
   theme: ThemeOption;
   fontFamily?: string;
   fontSize: number;
   surfaceFontSize: number;
+  tileLineHeight?: number;
   tabIndentSize: number;
   externalFileAutoSave: boolean;
   rememberSurfaceSize: boolean;

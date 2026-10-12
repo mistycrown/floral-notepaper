@@ -4,6 +4,13 @@ import chroma from "chroma-js";
 export const DEFAULT_TILE_COLOR = "#f6f3ec";
 export const SYSTEM_TILE_COLOR_LIGHT = "#f6f3ec";
 export const SYSTEM_TILE_COLOR_DARK = "#191919";
+export const MAX_TILE_BACKGROUND_TRANSPARENCY = 80;
+
+export function normalizeTileBackgroundTransparency(value?: number): number {
+  return typeof value === "number" && Number.isFinite(value)
+    ? Math.round(Math.min(MAX_TILE_BACKGROUND_TRANSPARENCY, Math.max(0, value)))
+    : 0;
+}
 
 export const DEFAULT_TILE_COLOR_PRESETS = [
   "#f6f3ec",
@@ -74,8 +81,9 @@ export function tileTextColor(background: string): string {
   return chroma(normalizeTileColor(background)).luminance() > 0.179 ? "#1a1a18" : "#ffffff";
 }
 
-// Keep the note's hue while moving toward black/white until emphasis is readable.
-// The same RGB calculation runs in NoteStore when the background is saved.
+// Preserve HSL hue and saturation while adjusting lightness for readable emphasis.
+// Mixing pastel RGB with black desaturates it; the save-time Rust calculation
+// uses the same channel formula below so persisted and inherited colors agree.
 export function getTileAccentColor(background: string): string {
   const normalized = normalizeTileColor(background);
   const rgb = [1, 3, 5].map((offset) => parseInt(normalized.slice(offset, offset + 2), 16));
@@ -86,9 +94,19 @@ export function getTileAccentColor(background: string): string {
       return sum + linear * [0.2126, 0.7152, 0.0722][index];
     }, 0);
   const baseLuminance = luminance(rgb);
-  const target = baseLuminance > 0.179 ? 0 : 255;
+  const channels = rgb.map((channel) => channel / 255);
+  const min = Math.min(...channels);
+  const max = Math.max(...channels);
+  const delta = max - min;
+  const lightness = (max + min) / 2;
+  const saturation = delta === 0 ? 0 : delta / (1 - Math.abs(2 * lightness - 1));
+  const hueChannels = channels.map((channel) => (delta === 0 ? 0 : (channel - min) / delta));
+  const target = baseLuminance > 0.179 ? 0 : 1;
   for (let step = 1; step <= 100; step++) {
-    const candidate = rgb.map((channel) => Math.round(channel + ((target - channel) * step) / 100));
+    const nextLightness = lightness + ((target - lightness) * step) / 100;
+    const chroma = (1 - Math.abs(2 * nextLightness - 1)) * saturation;
+    const offset = nextLightness - chroma / 2;
+    const candidate = hueChannels.map((channel) => Math.round((offset + chroma * channel) * 255));
     const accentLuminance = luminance(candidate);
     const contrast =
       (Math.max(baseLuminance, accentLuminance) + 0.05) /

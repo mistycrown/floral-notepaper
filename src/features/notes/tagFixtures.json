@@ -1,0 +1,34 @@
+[
+  {
+    "content": "#工作 #读书 #工作 #work_2026 #daily-life",
+    "tags": ["工作", "读书", "work_2026", "daily-life"]
+  },
+  { "content": "# 标题\n## 二级标题\n正文 #项目", "tags": ["项目"] },
+  {
+    "content": "C# foo#bar ##wrong \\#escaped https://example.com/#url www.example.com/#fragment [#label](https://example.com/#anchor) ![#alt](image.png)\n#正确",
+    "tags": ["正确"]
+  },
+  {
+    "content": "`#inline` ``a ` #code`` #外部\n```md\n#fenced\n````\n#保留\n~~~\n#other\n~~~\n    #indented\n\t#tab",
+    "tags": ["外部", "保留"]
+  },
+  {
+    "content": "(#括号) 【#中文】 #标签，#后续。#末尾！ #123 #A #a #",
+    "tags": ["括号", "中文", "标签", "后续", "末尾", "123", "A", "a"]
+  },
+  { "content": "```\n#unterminated", "tags": [] },
+  { "content": "前缀\\\\ #正常\n\\#转义\n#标签\r\n#另一个", "tags": ["正常", "标签", "另一个"] },
+  {
+    "content": "[#label][ref] [ref]: https://example.com/#destination\n[#visible] #real",
+    "tags": ["visible", "real"]
+  },
+  { "content": "[#label](path(with-parentheses)/#anchor) #outside", "tags": ["outside"] },
+  {
+    "content": "[label [#nested]](#anchor) #outside\n[#reference]: relative.md#anchor \"#title\"\n#real",
+    "tags": ["outside", "real"]
+  },
+  {
+    "content": "`#code\n#more` #after\n`` #hidden ` still hidden `` #end",
+    "tags": ["after", "end"]
+  }
+]

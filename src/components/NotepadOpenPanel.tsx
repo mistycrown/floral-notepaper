@@ -1,18 +1,19 @@
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { openNoteInEditor } from "../features/windows/api";
-import { filterNotes, formatShortDate, getDisplayTitle } from "../features/notes/noteUtils";
+import { filterNotes } from "../features/notes/noteUtils";
+import { NoteBrowserCard } from "./NoteBrowserCard";
 import type { NoteMetadata } from "../features/notes/types";
 
 interface NotepadOpenPanelProps {
   notes: NoteMetadata[];
+  compact?: boolean;
   onOpenNote: (noteId: string) => void;
 }
 
-export function NotepadOpenPanel({ notes, onOpenNote }: NotepadOpenPanelProps) {
+export function NotepadOpenPanel({ notes, compact = false, onOpenNote }: NotepadOpenPanelProps) {
   const { t } = useTranslation();
   const [searchQuery, setSearchQuery] = useState("");
-  const [hoveredNote, setHoveredNote] = useState<string | null>(null);
 
   const filteredNotes = useMemo(() => filterNotes(notes, searchQuery), [notes, searchQuery]);
 
@@ -66,55 +67,28 @@ export function NotepadOpenPanel({ notes, onOpenNote }: NotepadOpenPanelProps) {
       <div className="p-2 pt-0 flex-1 min-h-0 overflow-y-auto">
         <div className="space-y-0.5">
           {filteredNotes.map((note) => (
-            <button
-              key={note.id}
-              type="button"
-              onClick={() => onOpenNote(note.id)}
-              onMouseEnter={() => setHoveredNote(note.id)}
-              onMouseLeave={() => setHoveredNote(null)}
-              className="w-full text-left px-3.5 py-3 rounded-xl transition-all duration-200 cursor-pointer group hover:bg-paper-warm/70"
-            >
-              <div className="flex items-center justify-between mb-0.5">
-                <span className="text-[13px] font-display font-medium text-ink-soft group-hover:text-ink transition-colors truncate pr-2">
-                  {getDisplayTitle(note)}
-                </span>
-                <div className="flex items-center gap-1.5 shrink-0">
-                  <button
-                    type="button"
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      void openNoteInEditor(note.id);
-                    }}
-                    className="w-6 h-6 flex items-center justify-center rounded-md text-ink-ghost hover:text-bamboo hover:bg-bamboo-mist/50 transition-all duration-200 opacity-0 group-hover:opacity-100 cursor-pointer"
-                    title={t("notepad.tooltip.openInEditor", { defaultValue: "在编辑器中打开" })}
-                  >
-                    <svg
-                      width="13"
-                      height="13"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="2"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    >
-                      <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
-                      <polyline points="15 3 21 3 21 9" />
-                      <line x1="10" y1="14" x2="21" y2="3" />
-                    </svg>
-                  </button>
-                  <span className="text-[11px] text-ink-ghost font-mono tabular-nums">
-                    {formatShortDate(note.updatedAt)}
-                  </span>
-                </div>
-              </div>
-              <p className="text-[12px] text-ink-ghost leading-relaxed line-clamp-1 group-hover:text-ink-faint transition-colors">
-                {note.preview || t("common.blankNote", { defaultValue: "空白笔记" })}
-              </p>
-              {hoveredNote === note.id && (
-                <div className="mt-1.5 h-px bg-bamboo/10 transition-all duration-300" />
-              )}
-            </button>
+            <div key={note.id} className="relative group pr-7">
+              <NoteBrowserCard note={note} compact={compact} onSelect={onOpenNote} />
+              <button
+                type="button"
+                onClick={() => void openNoteInEditor(note.id)}
+                className="absolute right-0 top-1.5 w-6 h-6 flex items-center justify-center rounded-md text-ink-ghost hover:text-bamboo hover:bg-bamboo-mist/50 opacity-0 group-hover:opacity-100 focus:opacity-100 transition-all cursor-pointer"
+                title={t("notepad.tooltip.openInEditor")}
+              >
+                <svg
+                  width="13"
+                  height="13"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  aria-hidden="true"
+                >
+                  <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+                  <path d="M15 3h6v6M10 14 21 3" />
+                </svg>
+              </button>
+            </div>
           ))}
           {notes.length === 0 && (
             <div className="px-4 py-8 text-center text-[12px] text-ink-ghost">

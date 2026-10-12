@@ -1,6 +1,6 @@
 # Outline Notes Implementation Plan
 
-> **For agentic workers:** Implement this plan task-by-task in the current session. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** Implement this plan task-by-task in the current session. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Add text/list notes with editable bullet/todo nodes across all note surfaces.
 
@@ -27,23 +27,33 @@
 Files: `src/features/notes/types.ts`, `outline.ts`, `outline.test.ts`, `noteUtils.ts`, `src-tauri/src/services/notes.rs`.
 Interfaces: `OutlineNode`, `NoteType`, `parseOutline(content)`, `outlineMarkdown(nodes)`, `indentNode(nodes,id,outdent)`, `splitNode(nodes,id,start,end)`, `visibleOutline(nodes)`.
 
-- [ ] Test subtree movement, split/merge, Markdown multiline/todo round trips, visible nodes and stale metadata recovery.
-- [ ] Add optional type/nodes to save requests and backwards compatible metadata fields.
-- [ ] Persist and read state; verify legacy requests preserve it and text conversion clears it.
+- [x] Test subtree movement, split/merge, Markdown multiline/todo round trips, visible nodes and stale metadata recovery.
+- [x] Add optional type/nodes to save requests and backwards compatible metadata fields.
+- [x] Persist and read state; verify legacy requests preserve it and text conversion clears it.
 
 ### Task 2: Shared editor
 
 Files: `src/components/OutlineEditor.tsx`, `NoteTypeSelect.tsx`.
-Interfaces: controlled nodes/onChange, imperative focus/undo/redo; read-only presentation with task/fold interaction for tiles.
+Interfaces: controlled nodes/onChange, imperative focus/undo/redo; pinned presentation has task interaction without folding controls.
 
-- [ ] Implement node textarea, type selector, task checkbox, fold control, IME-safe keyboard handling, multiline paste and history.
-- [ ] Verify Chinese input, subtree keyboard operations and history.
+- [x] Implement node textarea, keyboard/right-click type switching, task checkbox, editor fold control, IME-safe keyboard handling, multiline paste and history.
+- [x] Verify Chinese input, subtree keyboard operations and history.
 
 ### Task 3: Surfaces and verification
 
 Files: `MainWindow.tsx`, `NotePad.tsx`, `Tile.tsx`.
 
-- [ ] Load/reset/save type and nodes through the existing refs and save queues, including changes with identical Markdown.
-- [ ] Add creation/type controls and swap in the shared outline editor, preserving text editor behavior.
-- [ ] Show outlines and interactive todo completion on tiles.
-- [ ] Run Vitest, TypeScript/Vite build, targeted lint and Rust persistence tests; inspect browser UI if available.
+- [x] Load/reset/save type and nodes through the existing refs and save queues, including changes with identical Markdown.
+- [x] Add creation/type controls and swap in the shared outline editor, preserving text editor behavior.
+- [x] Show outlines and interactive todo completion on tiles.
+- [x] Run Vitest, TypeScript/Vite build, targeted lint and Rust persistence tests; inspect browser UI if available.
+
+## Validation completed
+
+UI revision following user feedback: remove the keyboard hint and per-row type dropdowns; use Ctrl/Cmd+Shift+T and the existing clipboard context menu for bullet/todo conversion; omit fold buttons in pinned previews. The 17 focused editor/surface/tile/locale tests, TypeScript and targeted lint passed.
+
+- Vitest: 64 files, 317 tests passed, including 16 outline model/editor/surface tests.
+- Rust note persistence: 24 tests passed, including legacy metadata, hierarchy validation and outline reload/conversion.
+- TypeScript, targeted oxlint, production Vite build, and git diff whitespace checks passed.
+- Added jsdom as a development-only dependency for IME, keyboard, checkbox, folding, undo/redo and actual surface save-queue DOM tests.
+- Live visual verification was unavailable: no browser connected to the UI automation runtime. Temporary browser fixtures and the verification server were removed.

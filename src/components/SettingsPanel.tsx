@@ -26,12 +26,19 @@ import {
   DEFAULT_TILE_COLOR,
   normalizeTileColor,
   parseHexColor,
+  MAX_TILE_BACKGROUND_TRANSPARENCY,
+  normalizeTileBackgroundTransparency,
 } from "../features/settings/tileColor";
 import { applyTheme, watchSystemTheme } from "../features/settings/theme";
 import { LOCALE_OPTIONS } from "../locales/locale-whitelist";
 import { SlidingButtonGroup } from "./SlidingButtonGroup";
 import { TileColorPresetsEditor } from "./TileColorPresetsEditor";
 import { HexColorInput } from "./HexColorInput";
+import {
+  MIN_TILE_LINE_HEIGHT,
+  MAX_TILE_LINE_HEIGHT,
+  normalizeTileLineHeight,
+} from "../features/settings/tileLineHeight";
 
 const HARMONY_FONT_LICENSE_URL = new URL("../assets/fonts/LICENSE_Fonts", import.meta.url).href;
 
@@ -397,6 +404,32 @@ export function SettingsPanel({ config, onChange, onMigrateDataDir, onClose }: S
         </section>
 
         <section className="space-y-2">
+          <label htmlFor="tile-line-height" className="block text-[11px] font-body text-ink-faint">
+            {t("settings.tileLineHeight.label", { defaultValue: "桌面便签行距" })}
+          </label>
+          <div className="flex items-center gap-3 h-9 rounded-lg px-2.5 bg-paper-warm/45 border border-paper-deep/25">
+            <input
+              id="tile-line-height"
+              type="range"
+              min={MIN_TILE_LINE_HEIGHT}
+              max={MAX_TILE_LINE_HEIGHT}
+              step={0.1}
+              aria-valuetext={t("settings.tileLineHeight.value", {
+                value: normalizeTileLineHeight(config.tileLineHeight).toFixed(1),
+              })}
+              value={normalizeTileLineHeight(config.tileLineHeight)}
+              onChange={(event) => setConfigValue("tileLineHeight", Number(event.target.value))}
+              className="flex-1 h-1 accent-bamboo cursor-pointer appearance-none bg-transparent [&::-webkit-slider-runnable-track]:h-[3px] [&::-webkit-slider-runnable-track]:rounded-full [&::-webkit-slider-runnable-track]:bg-paper-deep/50 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-bamboo [&::-webkit-slider-thumb]:-mt-[4.5px] [&::-webkit-slider-thumb]:shadow-[0_1px_3px_rgba(0,0,0,0.15)]"
+            />
+            <span className="text-[12px] font-mono text-ink-soft tabular-nums text-right whitespace-nowrap">
+              {t("settings.tileLineHeight.value", {
+                value: normalizeTileLineHeight(config.tileLineHeight).toFixed(1),
+              })}
+            </span>
+          </div>
+        </section>
+
+        <section className="space-y-2">
           <label className="block text-[11px] font-body text-ink-faint">
             {t("settings.tabIndentSize", { defaultValue: "Tab 缩进宽��" })}
           </label>
@@ -453,6 +486,40 @@ export function SettingsPanel({ config, onChange, onMigrateDataDir, onClose }: S
               </button>
             </div>
           )}
+        </section>
+
+        <section className="space-y-2">
+          <label
+            htmlFor="tile-background-transparency"
+            className="block text-[11px] font-body text-ink-faint"
+          >
+            {t("settings.tileBackgroundTransparency.label")}
+          </label>
+          <div className="flex items-center gap-3 h-9 rounded-lg px-2.5 bg-paper-warm/45 border border-paper-deep/25">
+            <input
+              id="tile-background-transparency"
+              type="range"
+              aria-label={t("settings.tileBackgroundTransparency.label")}
+              aria-describedby="tile-background-transparency-hint"
+              min={0}
+              max={MAX_TILE_BACKGROUND_TRANSPARENCY}
+              step={1}
+              value={normalizeTileBackgroundTransparency(config.tileBackgroundTransparency)}
+              onChange={(event) =>
+                setConfigValue("tileBackgroundTransparency", Number(event.target.value))
+              }
+              className="flex-1 h-1 accent-bamboo cursor-pointer appearance-none bg-transparent [&::-webkit-slider-runnable-track]:h-[3px] [&::-webkit-slider-runnable-track]:rounded-full [&::-webkit-slider-runnable-track]:bg-paper-deep/50 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-bamboo [&::-webkit-slider-thumb]:-mt-[4.5px] [&::-webkit-slider-thumb]:shadow-[0_1px_3px_rgba(0,0,0,0.15)]"
+            />
+            <span className="text-[12px] font-mono text-ink-soft tabular-nums w-10 text-right">
+              {normalizeTileBackgroundTransparency(config.tileBackgroundTransparency)}%
+            </span>
+          </div>
+          <p
+            id="tile-background-transparency-hint"
+            className="text-[10px] text-ink-ghost leading-relaxed"
+          >
+            {t("settings.tileBackgroundTransparency.hint")}
+          </p>
         </section>
 
         <TileColorPresetsEditor
@@ -567,6 +634,17 @@ export function SettingsPanel({ config, onChange, onMigrateDataDir, onClose }: S
             value={config.defaultViewMode}
             onChange={(v) => setConfigValue("defaultViewMode", v)}
           />
+        </section>
+
+        <section className="space-y-2">
+          <ToggleRow
+            label={t("settings.compactNoteList.label")}
+            checked={config.compactNoteList ?? false}
+            onChange={(checked) => setConfigValue("compactNoteList", checked)}
+          />
+          <p className="text-[10px] leading-relaxed text-ink-ghost px-2.5">
+            {t("settings.compactNoteList.hint")}
+          </p>
         </section>
 
         <UpdateSettingsSection mode="settingsOnly" />

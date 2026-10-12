@@ -8,8 +8,12 @@ import {
   tileTextColor,
   getTileAccentColor,
   resolveNoteTileColor,
+  normalizeTileBackgroundTransparency,
 } from "../features/settings/tileColor";
 import { MarkdownPreviewLazy as MarkdownPreview } from "../features/markdown/MarkdownPreviewLazy";
+import { OutlineEditor } from "./OutlineEditor";
+import type { OutlineNode } from "../features/notes/types";
+import { normalizeTileLineHeight } from "../features/settings/tileLineHeight";
 
 export interface TileProps extends Omit<
   HTMLAttributes<HTMLDivElement>,
@@ -19,13 +23,17 @@ export interface TileProps extends Omit<
   content: string;
   color?: string;
   accentColor?: string;
+  backgroundTransparency?: number;
   width?: number | string;
   rotation?: number;
   fontSize?: number;
+  lineHeight?: number;
   renderMarkdown?: boolean;
   imageBaseDir?: string;
   onTaskToggle?: (offset: number, checked: boolean) => void;
   contentBottomPadding?: number;
+  outlineNodes?: OutlineNode[];
+  onOutlineChange?: (nodes: OutlineNode[]) => void;
 }
 
 const MARK_SIZE = 8;
@@ -82,13 +90,17 @@ export function Tile({
   content,
   color = DEFAULT_TILE_COLOR,
   accentColor,
+  backgroundTransparency,
   width = 260,
   rotation = 0,
   fontSize = 14,
+  lineHeight,
   renderMarkdown = false,
   imageBaseDir,
   onTaskToggle,
   contentBottomPadding,
+  outlineNodes,
+  onOutlineChange,
   className = "",
   style,
   children,
@@ -96,10 +108,14 @@ export function Tile({
 }: TileProps) {
   const { t } = useTranslation();
   const tileColor = normalizeTileColor(color);
-  const noteAccentColor = useMemo(
-    () => resolveNoteTileColor(accentColor, getTileAccentColor(tileColor)),
-    [accentColor, tileColor],
-  );
+  const transparency = normalizeTileBackgroundTransparency(backgroundTransparency);
+  const noteAccentColor = useMemo(() => {
+    const derived = getTileAccentColor(tileColor);
+    const saved = resolveNoteTileColor(accentColor, derived);
+    // Accent is a derived cache, not a separately editable color. Refresh old
+    // RGB-blended accents immediately, including notes already pinned at startup.
+    return saved === derived ? saved : derived;
+  }, [accentColor, tileColor]);
   const { borderColor, cornerColor, titleColor, contentColor, emptyColor } = useMemo(() => {
     const mixTarget = tileTextColor(tileColor);
     return {
@@ -112,13 +128,19 @@ export function Tile({
   }, [tileColor]);
   const mergedStyle: CSSProperties = {
     width,
-    backgroundColor: tileColor,
+    backgroundColor:
+      transparency === 0
+        ? tileColor
+        : chroma(tileColor)
+            .alpha(1 - transparency / 100)
+            .css(),
     color: contentColor,
     // Markdown and controls derive their palette from this note, independently
     // of the global application theme. This includes code blocks and tables.
     ...({
       "--color-ink": contentColor,
       "--note-accent-color": noteAccentColor,
+      "--note-line-height": normalizeTileLineHeight(lineHeight),
       "--note-accent-text-color": tileTextColor(noteAccentColor),
       "--color-ink-soft": contentColor,
       "--color-ink-faint": chroma(contentColor).alpha(0.7).css(),
@@ -154,7 +176,14 @@ export function Tile({
             {title}
           </div>
         )}
-        {content ? (
+        {outlineNodes ? (
+          <OutlineEditor
+            nodes={outlineNodes}
+            onChange={onOutlineChange}
+            readOnly
+            fontSize={fontSize}
+          />
+        ) : content ? (
           renderMarkdown ? (
             <div data-note-selectable="true" style={{ color: contentColor }}>
               <MarkdownPreview

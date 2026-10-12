@@ -307,12 +307,11 @@ input::placeholder {
   height: 0.9em;
 }
 
+.note-task-checkbox,
 .markdown-selectable .markdown-task-marker > input[type="checkbox"] {
   appearance: none;
   -webkit-appearance: none;
-  position: absolute;
-  right: 0.35em;
-  top: 0;
+  position: relative;
   width: 0.9em;
   height: 0.9em;
   margin: 0;
@@ -321,10 +320,18 @@ input::placeholder {
   background: transparent;
 }
 
+.markdown-selectable .markdown-task-marker > input[type="checkbox"] {
+  position: absolute;
+  right: 0.35em;
+  top: 0;
+}
+
+.note-task-checkbox:checked,
 .markdown-selectable .markdown-task-marker > input[type="checkbox"]:checked {
   background: var(--note-accent-color, var(--color-bamboo));
 }
 
+.note-task-checkbox:checked::after,
 .markdown-selectable .markdown-task-marker > input[type="checkbox"]:checked::after {
   content: "";
   position: absolute;
@@ -337,13 +344,27 @@ input::placeholder {
   transform: rotate(45deg);
 }
 
+.note-task-checkbox:focus-visible,
 .markdown-selectable .markdown-task-marker > input[type="checkbox"]:focus-visible {
   outline: 2px solid var(--note-accent-color, var(--color-bamboo));
   outline-offset: 2px;
 }
 
-[data-note-tile="true"] .markdown-selectable strong {
+[data-note-tile="true"] .markdown-selectable strong,
+[data-note-tile="true"] [data-outline-editor="true"] strong {
   color: var(--note-accent-color);
+}
+
+/* Only pinned note bodies use the configurable line height. */
+[data-note-tile="true"] .note-selectable,
+[data-note-tile="true"] .markdown-selectable,
+[data-note-tile="true"] .markdown-selectable :is(p, ul, ol, li, blockquote, pre, code, td, th),
+[data-note-tile="true"] [data-outline-row] > :is(div, span, textarea) {
+  line-height: var(--note-line-height, 1.8);
+}
+
+[data-note-tile="true"] .outline-task-marker {
+  height: calc(var(--note-line-height, 1.8) * 1em);
 }
 
 /* Noise texture overlay for paper feel */

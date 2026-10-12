@@ -5,6 +5,8 @@ import {
   filterNotes,
   getDisplayTitle,
   groupNotesByCategory,
+  groupNotesByTag,
+  metadataFromNote,
 } from "./noteUtils";
 import type { NoteMetadata } from "./types";
 
@@ -58,5 +60,40 @@ describe("note utilities", () => {
     expect(categoryNames).toContain("工作");
     const workGroup = groups.find((g) => g.category === "工作");
     expect(workGroup?.notes).toEqual([]);
+  });
+
+  it("groups multi-tag notes once per tag, with newest first and untagged last", () => {
+    const tagged = [
+      { ...notes[0], tags: ["工作", "读书", "工作"] },
+      { ...notes[1], tags: ["工作"] },
+      { ...notes[0], id: "3", tags: [] },
+      { ...notes[0], id: "4" },
+    ];
+    const groups = groupNotesByTag(tagged);
+    expect(groups.find((group) => group.tag === "工作")?.notes.map((note) => note.id)).toEqual([
+      "2",
+      "1",
+    ]);
+    expect(groups.find((group) => group.tag === "读书")?.notes.map((note) => note.id)).toEqual([
+      "1",
+    ]);
+    expect(groups[groups.length - 1]?.notes.map((note) => note.id)).toEqual(["3", "4"]);
+    expect(groups[groups.length - 1]?.tag).toBe("");
+    expect(groupNotesByTag([])).toEqual([]);
+    expect(tagged[0].tags).toEqual(["工作", "读书", "工作"]);
+  });
+
+  it("finds tags beyond the preview with or without the hashtag prefix", () => {
+    const tagged = [{ ...notes[0], tags: ["long_tag", "项目"] }];
+    expect(filterNotes(tagged, "#LONG_TAG")).toEqual(tagged);
+    expect(filterNotes(tagged, "项目")).toEqual(tagged);
+    expect(filterNotes(tagged, "#missing")).toEqual([]);
+  });
+
+  it("derives metadata tags from the saved full content", () => {
+    const { preview: _preview, ...base } = notes[0];
+    const content = `${"正文 ".repeat(60)}\n#工作 #读书`;
+    expect(metadataFromNote({ ...base, content }).tags).toEqual(["工作", "读书"]);
+    expect(metadataFromNote({ ...base, content: "正文", tags: ["stale"] }).tags).toEqual([]);
   });
 });

@@ -1,4 +1,32 @@
 {
+  "outline": {
+    "noteType": "Note type",
+    "text": "Text",
+    "list": "List",
+    "editor": "Outline editor",
+    "newList": "New list note",
+    "toBullet": "Convert to bullet",
+    "toTodo": "Convert to todo",
+    "expand": "Expand children",
+    "collapse": "Collapse children",
+    "complete": "Complete task",
+    "item": "Outline item",
+    "placeholder": "Write an item…",
+    "nodeType": "Node type",
+    "bullet": "Bullet",
+    "todo": "Todo",
+    "add": "+ Add item"
+  },
+  "tags": {
+    "suggestions": "Existing tags · ↑↓ select, Enter complete, Esc dismiss",
+    "groupBy": "Group notes by",
+    "byCategory": "Categories",
+    "byTag": "Tags",
+    "all": "All",
+    "untagged": "Untagged",
+    "noteTags": "Current note tags",
+    "hint": "Type #tag to add a tag, e.g. #work; remove it from the text to delete it"
+  },
   "noteColor": {
     "hexLabel": "Hex color",
     "invalidHex": "Enter a valid #RRGGBB or #RGB color",
@@ -217,6 +245,10 @@
     }
   },
   "settings": {
+    "compactNoteList": {
+      "label": "Compact mode",
+      "hint": "Show only a single title line in note lists, hiding previews, dates and word counts."
+    },
     "tileColorPresets": {
       "label": "Note quick colors",
       "slot": "Color slot {{index}}",
@@ -246,6 +278,10 @@
       "label": "Default view",
       "preview": "Preview",
       "split": "Split"
+    },
+    "tileLineHeight": {
+      "label": "Pinned note line spacing",
+      "value": "{{value}}×"
     },
     "fontSize": {
       "editor": "Editor font size",
@@ -288,6 +324,10 @@
       "label": "Theme",
       "light": "Light",
       "system": "System"
+    },
+    "tileBackgroundTransparency": {
+      "label": "Pinned note background transparency",
+      "hint": "0% is opaque. Higher values make the background more transparent. Applies immediately to all pinned notes; text and buttons stay clear."
     },
     "tileColor": {
       "custom": "Custom",

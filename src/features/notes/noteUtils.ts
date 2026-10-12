@@ -1,5 +1,6 @@
 import { t, type TFunction } from "i18next";
 import type { Note, NoteMetadata } from "./types";
+import { extractNoteTags } from "./tags";
 
 export function getDisplayTitle(
   note: Pick<NoteMetadata, "title" | "preview">,
@@ -36,6 +37,9 @@ export function metadataFromNote(note: Note): NoteMetadata {
     updatedAt: note.updatedAt,
     wordCount: note.wordCount,
     preview: buildPreview(note.content),
+    noteType: note.noteType ?? "text",
+    ...(note.outlineNodes ? { outlineNodes: note.outlineNodes } : {}),
+    tags: extractNoteTags(note.content),
     ...(note.tileColor ? { tileColor: note.tileColor } : {}),
     ...(note.tileAccentColor ? { tileAccentColor: note.tileAccentColor } : {}),
   };
@@ -94,11 +98,43 @@ export function filterNotes(notes: NoteMetadata[], query: string): NoteMetadata[
   if (!normalized) return notes;
 
   return notes.filter((note) => {
-    const haystack = [note.title, note.preview, note.fileName, getDisplayTitle(note)]
+    const haystack = [
+      note.title,
+      note.preview,
+      note.fileName,
+      getDisplayTitle(note),
+      ...(note.tags ?? []).map((tag) => `#${tag}`),
+    ]
       .join(" ")
       .toLowerCase();
     return haystack.includes(normalized);
   });
+}
+
+export interface TagGroup {
+  tag: string;
+  notes: NoteMetadata[];
+}
+
+export function groupNotesByTag(notes: NoteMetadata[]): TagGroup[] {
+  const groups = new Map<string, NoteMetadata[]>();
+  for (const note of notes) {
+    for (const tag of new Set(note.tags?.length ? note.tags : [""])) {
+      const group = groups.get(tag) ?? [];
+      group.push(note);
+      groups.set(tag, group);
+    }
+  }
+  return [...groups]
+    .map(([tag, entries]) => ({
+      tag,
+      notes: [...entries].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)),
+    }))
+    .sort((a, b) => {
+      if (!a.tag) return 1;
+      if (!b.tag) return -1;
+      return a.tag.localeCompare(b.tag);
+    });
 }
 
 export function formatShortDate(value: string): string {
