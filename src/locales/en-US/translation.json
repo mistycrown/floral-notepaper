@@ -25,7 +25,10 @@
     "all": "All",
     "untagged": "Untagged",
     "noteTags": "Current note tags",
-    "hint": "Type #tag to add a tag, e.g. #work; remove it from the text to delete it"
+    "hint": "Tags are stored in note metadata; press Enter to add",
+    "add": "Add tag",
+    "remove": "Remove tag {{tag}}",
+    "invalid": "Use letters, numbers, underscores or hyphens"
   },
   "noteColor": {
     "hexLabel": "Hex color",
@@ -209,6 +212,16 @@
     "moveToCategory": "Move to category…"
   },
   "notepad": {
+    "timestamp": {
+      "add": "New timestamped entry"
+    },
+    "clipboard": {
+      "appendTooltip": "Append item from clipboard",
+      "empty": "The clipboard has no text to append",
+      "confirmLongText": "The clipboard contains {{count}} characters, exceeding 100. This may be accidental. Append it as one item anyway?",
+      "confirmTitle": "Confirm appending item",
+      "append": "Append"
+    },
     "button": {
       "clear": "Clear"
     },
@@ -245,6 +258,13 @@
     }
   },
   "settings": {
+    "quickInsert": {
+      "title": "List quick insert",
+      "timestamp": "Timestamp entry type",
+      "clipboard": "Clipboard entry type",
+      "bullet": "Bullet",
+      "todo": "To-do"
+    },
     "compactNoteList": {
       "label": "Compact mode",
       "hint": "Show only a single title line in note lists, hiding previews, dates and word counts."

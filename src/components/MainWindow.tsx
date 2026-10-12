@@ -36,12 +36,10 @@ import {
 import type { AppConfig, ViewMode } from "../features/settings/types";
 import { normalizeTileColor, resolveTileColor } from "../features/settings/tileColor";
 import { NoteColorPicker } from "./NoteColorPicker";
-import { NoteGroupingControl, NoteTagHint, type NoteGrouping } from "./NoteTags";
+import { NoteGroupingControl, NoteTagEditor, type NoteGrouping } from "./NoteTags";
 import { TagNoteBrowser } from "./TagNoteBrowser";
 import { AllNotesBrowser } from "./AllNotesBrowser";
 import { CategoryNoteBrowser } from "./CategoryNoteBrowser";
-import { TagAutocomplete } from "./TagAutocomplete";
-import { applyTextareaTagCompletion } from "../features/notes/tagCompletion";
 import { getUpdateStatus, reportInstallPreparation } from "../features/update/api";
 import {
   ABOUT_UPDATE_LABEL_DURATION_MS,
@@ -375,6 +373,9 @@ export function MainWindow({
   );
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [content, setContent] = useState("");
+  const [tags, setTags] = useState<string[]>([]);
+  const tagsValueRef = useRef(tags);
+  tagsValueRef.current = tags;
   const [title, setTitle] = useState("");
   const [saveState, setSaveState] = useState<SaveState>("idle");
   const [hoveredId, setHoveredId] = useState<string | null>(null);
@@ -645,10 +646,12 @@ export function MainWindow({
       selectedIdRef.current = note.id;
       titleValueRef.current = note.title;
       contentValueRef.current = note.content;
+      tagsValueRef.current = note.tags ?? [];
       saveStateRef.current = "saved";
       setSelectedId(note.id);
       setTitle(note.title);
       setContent(note.content);
+      setTags(note.tags ?? []);
       outline.load(note);
       setSaveState("saved");
       setNoteTransitionKey((k) => k + 1);
@@ -691,10 +694,12 @@ export function MainWindow({
     selectedIdRef.current = null;
     titleValueRef.current = "";
     contentValueRef.current = "";
+    tagsValueRef.current = [];
     saveStateRef.current = "idle";
     setSelectedId(null);
     setTitle("");
     setContent("");
+    setTags([]);
     outline.load();
     setSaveState("idle");
   }, [loadEpoch, outline.load]);
@@ -945,9 +950,11 @@ export function MainWindow({
                   }
                   titleValueRef.current = note.title;
                   contentValueRef.current = note.content;
+                  tagsValueRef.current = note.tags ?? [];
                   saveStateRef.current = "saved";
                   setTitle(note.title);
                   setContent(note.content);
+                  setTags(note.tags ?? []);
                   outline.load(note);
                   setSaveState("saved");
                 })
@@ -1171,6 +1178,7 @@ export function MainWindow({
       // 保存完成后也只在"仍停留在这篇笔记"时才更新保存状态
       const titleSnapshot = titleValueRef.current;
       const contentSnapshot = contentValueRef.current;
+      const tagsSnapshot = tagsValueRef.current;
       const outlineSnapshot = outline.snapshot.current;
       const stillCurrent = () => selectedIdRef.current === id;
       const settleSaveState = (state: SaveState) => {
@@ -1196,6 +1204,7 @@ export function MainWindow({
           const note = await updateNote(id, {
             title: titleSnapshot,
             content: contentSnapshot,
+            tags: tagsSnapshot,
             ...outlineSnapshot,
             category,
           });
@@ -1203,6 +1212,7 @@ export function MainWindow({
           const contentChanged =
             contentValueRef.current !== contentSnapshot ||
             titleValueRef.current !== titleSnapshot ||
+            tagsValueRef.current !== tagsSnapshot ||
             outline.snapshot.current !== outlineSnapshot;
           settleSaveState(contentChanged ? "dirty" : "saved");
         }
@@ -1295,6 +1305,7 @@ export function MainWindow({
     // content 与 title 用于在持续输入时不断重置防抖计时器
     content,
     title,
+    tags,
     outline.nodes,
     outline.noteType,
     isExternal,
@@ -2811,7 +2822,18 @@ export function MainWindow({
                   {saveStateLabel[saveState]}
                 </span>
               </div>
-              {selectedId && <NoteTagHint content={content} />}
+              {selectedId && !isExternal && (
+                <NoteTagEditor
+                  key={selectedId}
+                  tags={tags}
+                  knownTags={knownTags}
+                  onChange={(next) => {
+                    tagsValueRef.current = next;
+                    setTags(next);
+                    markDirty();
+                  }}
+                />
+              )}
             </div>
 
             <div
@@ -2829,7 +2851,6 @@ export function MainWindow({
                     key={selectedId}
                     ref={outlineEditorRef}
                     nodes={outline.nodes}
-                    tags={knownTags}
                     onChange={outline.changeNodes}
                     fontSize={settingsConfig?.fontSize ?? 14}
                   />
@@ -2883,16 +2904,7 @@ export function MainWindow({
                         ))}
                       </div>
 
-                      <TagAutocomplete
-                        tags={knownTags}
-                        className="flex-1 overflow-hidden px-5 pb-4"
-                        onComplete={(textarea, edit) =>
-                          applyTextareaTagCompletion(textarea, edit, (value) => {
-                            setContent(value);
-                            markDirty();
-                          })
-                        }
-                      >
+                      <div className="flex-1 overflow-hidden px-5 pb-4">
                         <textarea
                           ref={contentRef}
                           data-tab-indent="true"
@@ -2917,7 +2929,7 @@ export function MainWindow({
                           spellCheck={false}
                           disabled={!selectedId}
                         />
-                      </TagAutocomplete>
+                      </div>
                     </div>
                   )}
 

@@ -1,6 +1,6 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { expect, test } from "vitest";
-import { NoteGroupingControl, NoteTagHint } from "./NoteTags";
+import { NoteGroupingControl, NoteTagEditor } from "./NoteTags";
 import { TagNoteBrowser } from "./TagNoteBrowser";
 import type { NoteMetadata } from "../features/notes/types";
 
@@ -31,12 +31,15 @@ test("tag browser exposes each tag, untagged notes, counts and selection", () =>
   expect(html.match(/aria-expanded="true"/g)).toHaveLength(3);
 });
 
-test("editor hints show Chinese tags while preserving Markdown headings", () => {
-  const html = renderToStaticMarkup(<NoteTagHint content={"# 标题\n正文 #工作 #读书"} />);
+test("metadata editor shows saved Chinese tags and add/remove controls", () => {
+  const html = renderToStaticMarkup(
+    <NoteTagEditor tags={["工作", "读书"]} knownTags={[]} onChange={() => {}} />,
+  );
   expect(html).toContain("#工作");
   expect(html).toContain("#读书");
-  expect(html).not.toContain(">#标题<");
-  expect(renderToStaticMarkup(<NoteTagHint content="正文" />)).toContain("输入 #标签");
+  expect(html).toContain("移除标签 工作");
+  expect(html).toContain("添加标签");
+  expect(html).not.toContain("输入 #标签");
 });
 
 test("grouping control exposes all modes and the selected mode", () => {

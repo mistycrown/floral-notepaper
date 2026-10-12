@@ -34,6 +34,7 @@ import { LOCALE_OPTIONS } from "../locales/locale-whitelist";
 import { SlidingButtonGroup } from "./SlidingButtonGroup";
 import { TileColorPresetsEditor } from "./TileColorPresetsEditor";
 import { HexColorInput } from "./HexColorInput";
+import { normalizeQuickInsertKind } from "../features/settings/quickInsertKind";
 import {
   MIN_TILE_LINE_HEIGHT,
   MAX_TILE_LINE_HEIGHT,
@@ -276,6 +277,41 @@ export function SettingsPanel({ config, onChange, onMigrateDataDir, onClose }: S
             checked={config.splitScrollSync ?? true}
             onChange={(checked) => setConfigValue("splitScrollSync", checked)}
           />
+        </section>
+
+        <section className="space-y-2">
+          <label className="block text-[11px] font-body text-ink-faint">
+            {t("settings.quickInsert.title", { defaultValue: "列表快捷插入" })}
+          </label>
+          {(["timestampInsertKind", "clipboardInsertKind"] as const).map((key) => {
+            const label =
+              key === "timestampInsertKind"
+                ? t("settings.quickInsert.timestamp", { defaultValue: "时间记录默认类型" })
+                : t("settings.quickInsert.clipboard", { defaultValue: "剪贴板追加默认类型" });
+            return (
+              <label
+                key={key}
+                className="flex items-center justify-between gap-2 text-[11px] text-ink-soft"
+              >
+                <span>{label}</span>
+                <select
+                  aria-label={label}
+                  value={normalizeQuickInsertKind(config[key])}
+                  onChange={(event) =>
+                    setConfigValue(key, normalizeQuickInsertKind(event.target.value))
+                  }
+                  className="h-7 px-2 rounded-md bg-paper-warm/70 border border-paper-deep/40 cursor-pointer"
+                >
+                  <option value="bullet">
+                    {t("settings.quickInsert.bullet", { defaultValue: "普通节点" })}
+                  </option>
+                  <option value="todo">
+                    {t("settings.quickInsert.todo", { defaultValue: "待办" })}
+                  </option>
+                </select>
+              </label>
+            );
+          })}
         </section>
 
         {/* 快捷键功能设置区域，与上方常规设置分开 */}

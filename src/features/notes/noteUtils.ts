@@ -1,6 +1,5 @@
 import { t, type TFunction } from "i18next";
 import type { Note, NoteMetadata } from "./types";
-import { extractNoteTags } from "./tags";
 
 export function getDisplayTitle(
   note: Pick<NoteMetadata, "title" | "preview">,
@@ -39,7 +38,7 @@ export function metadataFromNote(note: Note): NoteMetadata {
     preview: buildPreview(note.content),
     noteType: note.noteType ?? "text",
     ...(note.outlineNodes ? { outlineNodes: note.outlineNodes } : {}),
-    tags: extractNoteTags(note.content),
+    tags: note.tags ?? [],
     ...(note.tileColor ? { tileColor: note.tileColor } : {}),
     ...(note.tileAccentColor ? { tileAccentColor: note.tileAccentColor } : {}),
   };

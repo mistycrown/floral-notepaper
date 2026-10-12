@@ -10,6 +10,7 @@ import { taskListInsertion } from "../features/markdown/taskLists";
 import { POPUP_VIEWPORT_MARGIN, useViewportPopupPosition } from "./popupPosition";
 import { requestOutlineNodeType } from "../features/notes/outlineNodeActions";
 import type { OutlineNode } from "../features/notes/types";
+import { requestOutlineSelection } from "../features/notes/outlineSelectionActions";
 
 interface MenuState {
   x: number;
@@ -39,6 +40,7 @@ export function ContextMenuProvider({ children }: { children: React.ReactNode })
   const selectionRef = useRef("");
   const previewTargetRef = useRef<HTMLElement | null>(null);
   const outlineTargetRef = useRef<HTMLElement | null>(null);
+  const outlineEditorRef = useRef<HTMLElement | null>(null);
   const tileContextMenuItems = useMemo(() => getTileContextMenuItems(t), [t]);
 
   useEffect(() => {
@@ -66,11 +68,13 @@ export function ContextMenuProvider({ children }: { children: React.ReactNode })
       const tileTarget = target.closest<HTMLElement>('[data-context-menu="tile"]');
       const padTarget = target.closest<HTMLElement>('[data-context-menu="pad"]');
       const previewTarget = target.closest<HTMLElement>(".markdown-selectable");
+      const outlineEditor = target.closest<HTMLElement>('[data-outline-editor="true"]');
+      const outlineEditable = outlineEditor?.dataset.outlineEditable === "true";
       const outlineTarget = target.closest('[data-outline-editable="true"]')
         ? target.closest<HTMLElement>("[data-outline-row]")
         : null;
 
-      if (!isEditable && !tileTarget && !padTarget && !previewTarget && !outlineTarget) {
+      if (!isEditable && !tileTarget && !padTarget && !previewTarget && !outlineEditor) {
         event.preventDefault();
         return;
       }
@@ -85,9 +89,12 @@ export function ContextMenuProvider({ children }: { children: React.ReactNode })
       if (target instanceof HTMLTextAreaElement || target instanceof HTMLInputElement) {
         selection = target.value.slice(target.selectionStart ?? 0, target.selectionEnd ?? 0);
       }
+      const outlineSelection = requestOutlineSelection(outlineEditor, "getSelection");
+      if (outlineSelection.handled) selection = outlineSelection.selectionText ?? "";
       selectionRef.current = selection;
-      previewTargetRef.current = previewTarget;
+      previewTargetRef.current = outlineEditor ?? previewTarget;
       outlineTargetRef.current = outlineTarget;
+      outlineEditorRef.current = outlineEditor;
 
       if (tileTarget) {
         editableTargetRef.current = null;
@@ -110,7 +117,14 @@ export function ContextMenuProvider({ children }: { children: React.ReactNode })
         x: event.clientX,
         y: event.clientY,
         hasSelection: selection.length > 0,
-        type: isEditable || outlineTarget ? "edit" : padTarget ? "pad" : "preview",
+        type:
+          isEditable || outlineEditable
+            ? "edit"
+            : outlineEditor
+              ? "preview"
+              : padTarget
+                ? "pad"
+                : "preview",
         padMode: padTarget?.dataset.padMode,
         canInsertTask:
           !outlineTarget &&
@@ -154,6 +168,24 @@ export function ContextMenuProvider({ children }: { children: React.ReactNode })
 
   const runCommand = async (command: string) => {
     const target = editableTargetRef.current;
+    const outlineEditor = outlineEditorRef.current;
+    if (command === "selectAll" && requestOutlineSelection(outlineEditor, "selectAll").handled) {
+      dismissMenu();
+      return;
+    }
+    const selection = requestOutlineSelection(outlineEditor, "getSelection");
+    if (selection.handled && ["copy", "cut", "paste"].includes(command)) {
+      const text = selection.selectionText ?? "";
+      if (command === "copy" || command === "cut") {
+        await writeText(text);
+        if (command === "cut") requestOutlineSelection(outlineEditor, "replaceSelection", "", text);
+      } else {
+        const pasted = await readText();
+        requestOutlineSelection(outlineEditor, "replaceSelection", pasted, text);
+      }
+      dismissMenu();
+      return;
+    }
 
     if (target instanceof HTMLTextAreaElement || target instanceof HTMLInputElement) {
       const start = target.selectionStart ?? 0;
@@ -227,15 +259,27 @@ export function ContextMenuProvider({ children }: { children: React.ReactNode })
     () =>
       menu
         ? menu.type === "tile"
-          ? tileContextMenuItems.map((item) => ({
-              ...item,
-              shortcut: "",
-              action: () =>
-                item.action === "copy" && menu.hasSelection
-                  ? runCommand("copy")
-                  : runSurfaceAction(item.action),
-              disabled: false,
-            }))
+          ? [
+              ...tileContextMenuItems.map((item) => ({
+                ...item,
+                shortcut: "",
+                action: () =>
+                  item.action === "copy" && menu.hasSelection
+                    ? runCommand("copy")
+                    : runSurfaceAction(item.action),
+                disabled: false,
+              })),
+              ...(outlineEditorRef.current
+                ? [
+                    {
+                      label: t("contextMenu.edit.selectAll", { defaultValue: "全选" }),
+                      shortcut: "Ctrl+A",
+                      action: () => runCommand("selectAll"),
+                      disabled: false,
+                    },
+                  ]
+                : []),
+            ]
           : [
               ...(menu.type === "edit"
                 ? [

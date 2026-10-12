@@ -90,10 +90,11 @@ describe("note utilities", () => {
     expect(filterNotes(tagged, "#missing")).toEqual([]);
   });
 
-  it("derives metadata tags from the saved full content", () => {
+  it("copies saved metadata tags independently of full content", () => {
     const { preview: _preview, ...base } = notes[0];
     const content = `${"正文 ".repeat(60)}\n#工作 #读书`;
-    expect(metadataFromNote({ ...base, content }).tags).toEqual(["工作", "读书"]);
-    expect(metadataFromNote({ ...base, content: "正文", tags: ["stale"] }).tags).toEqual([]);
+    expect(metadataFromNote({ ...base, content, tags: ["元数据"] }).tags).toEqual(["元数据"]);
+    expect(metadataFromNote({ ...base, content: "正文", tags: [] }).tags).toEqual([]);
+    expect(metadataFromNote({ ...base, content, tags: undefined }).tags).toEqual([]);
   });
 });

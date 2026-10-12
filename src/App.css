@@ -277,9 +277,20 @@ input::placeholder {
 
 .note-selectable,
 .markdown-selectable,
+[data-outline-editor="true"],
+[data-outline-editor="true"] [data-outline-row] :is(div, time, time span),
 .markdown-selectable * {
   -webkit-user-select: text;
   user-select: text;
+}
+
+[data-outline-selected="true"] {
+  border-radius: 3px;
+  background-color: color-mix(
+    in srgb,
+    var(--note-accent-color, var(--color-bamboo)) 16%,
+    transparent
+  );
 }
 
 .note-selectable,
@@ -359,8 +370,14 @@ input::placeholder {
 [data-note-tile="true"] .note-selectable,
 [data-note-tile="true"] .markdown-selectable,
 [data-note-tile="true"] .markdown-selectable :is(p, ul, ol, li, blockquote, pre, code, td, th),
-[data-note-tile="true"] [data-outline-row] > :is(div, span, textarea) {
+[data-note-tile="true"] [data-outline-row] > :is(div, span, textarea),
+[data-note-tile="true"] [data-outline-row] > div > :is(div, textarea) {
   line-height: var(--note-line-height, 1.8);
+}
+
+/* Match the distance between list items to consecutive lines of plain text. */
+[data-note-tile="true"] [data-outline-row] {
+  padding-block: 0;
 }
 
 [data-note-tile="true"] .outline-task-marker {

@@ -25,7 +25,10 @@
     "all": "全部",
     "untagged": "無標籤",
     "noteTags": "目前筆記標籤",
-    "hint": "輸入 #標籤 新增標籤，例如 #工作；刪除正文標籤即可移除"
+    "hint": "標籤儲存在便簽元數據中，輸入後按 Enter 新增",
+    "add": "新增標籤",
+    "remove": "移除標籤 {{tag}}",
+    "invalid": "標籤僅支援中文、字母、數字、底線和連字符"
   },
   "noteColor": {
     "hexLabel": "十六進制色值",
@@ -209,6 +212,16 @@
     "moveToCategory": "移至分類…"
   },
   "notepad": {
+    "timestamp": {
+      "add": "新增時間記錄"
+    },
+    "clipboard": {
+      "appendTooltip": "從剪貼簿追加條目",
+      "empty": "剪貼簿中沒有可追加的文字",
+      "confirmLongText": "剪貼簿中的文字有 {{count}} 字，超過 100 字，可能是誤操作。仍要追加為一個條目嗎？",
+      "confirmTitle": "確認追加條目",
+      "append": "追加"
+    },
     "button": {
       "clear": "清除"
     },
@@ -245,6 +258,13 @@
     }
   },
   "settings": {
+    "quickInsert": {
+      "title": "清單快捷插入",
+      "timestamp": "時間記錄預設類型",
+      "clipboard": "剪貼簿追加預設類型",
+      "bullet": "普通節點",
+      "todo": "待辦"
+    },
     "compactNoteList": {
       "label": "精簡模式",
       "hint": "筆記瀏覽卡片只顯示一行標題，隱藏預覽、日期和字數。"

@@ -25,7 +25,10 @@
     "all": "全部",
     "untagged": "无标签",
     "noteTags": "当前笔记标签",
-    "hint": "输入 #标签 添加标签，例如 #工作；删除正文标签即可移除"
+    "hint": "标签保存在便签元数据中，输入后按 Enter 添加",
+    "add": "添加标签",
+    "remove": "移除标签 {{tag}}",
+    "invalid": "标签仅支持中文、字母、数字、下划线和连字符"
   },
   "noteColor": {
     "hexLabel": "十六进制色值",
@@ -209,6 +212,16 @@
     "moveToCategory": "移动到分类…"
   },
   "notepad": {
+    "timestamp": {
+      "add": "新建时间记录"
+    },
+    "clipboard": {
+      "appendTooltip": "从剪贴板追加条目",
+      "empty": "剪贴板中没有可追加的文字",
+      "confirmLongText": "剪贴板中的文字有 {{count}} 字，超过 100 字，可能是误操作。仍要追加为一个条目吗？",
+      "confirmTitle": "确认追加条目",
+      "append": "追加"
+    },
     "button": {
       "clear": "清空"
     },
@@ -245,6 +258,13 @@
     }
   },
   "settings": {
+    "quickInsert": {
+      "title": "列表快捷插入",
+      "timestamp": "时间记录默认类型",
+      "clipboard": "剪贴板追加默认类型",
+      "bullet": "普通节点",
+      "todo": "待办"
+    },
     "compactNoteList": {
       "label": "紧凑模式",
       "hint": "笔记浏览卡片只显示一行标题，隐藏预览、日期和字数。"

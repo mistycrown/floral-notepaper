@@ -1,4 +1,20 @@
-// Keep these Markdown rules aligned with features/notes/tags.ts via shared fixtures.
+pub fn normalize_tags(tags: Vec<String>) -> Vec<String> {
+    let mut normalized = Vec::new();
+    for tag in tags {
+        let tag = tag.trim().strip_prefix('#').unwrap_or(tag.trim());
+        if !tag.is_empty()
+            && tag
+                .chars()
+                .all(|ch| ch.is_alphanumeric() || matches!(ch, '_' | '-'))
+            && !normalized.iter().any(|existing| existing == tag)
+        {
+            normalized.push(tag.to_string());
+        }
+    }
+    normalized
+}
+
+// Legacy Markdown extraction is used only to migrate metadata without tags.
 pub fn extract_tags(content: &str) -> Vec<String> {
     let mut fence: Option<(char, usize)> = None;
     let mut text = String::new();
@@ -150,6 +166,29 @@ pub fn extract_tags(content: &str) -> Vec<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn metadata_tags_trim_deduplicate_and_reject_invalid_names() {
+        assert_eq!(
+            normalize_tags(
+                vec![
+                    " 工作 ",
+                    "#读书",
+                    "工作",
+                    "",
+                    "bad tag",
+                    "标点，",
+                    "项目_1-A",
+                    "a",
+                    "A"
+                ]
+                .into_iter()
+                .map(str::to_string)
+                .collect()
+            ),
+            vec!["工作", "读书", "项目_1-A", "a", "A"]
+        );
+    }
 
     #[test]
     fn shared_markdown_tag_fixtures() {

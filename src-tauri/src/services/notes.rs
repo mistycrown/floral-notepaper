@@ -1,4 +1,4 @@
-use super::tags::extract_tags;
+use super::tags::{extract_tags, normalize_tags};
 use crate::json_io::write_json_atomic;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -85,6 +85,10 @@ pub struct AppConfig {
     pub tile_double_click_to_edit: bool,
     #[serde(default)]
     pub tile_save_returns_to_pin: bool,
+    #[serde(default = "default_outline_insert_kind")]
+    pub timestamp_insert_kind: String,
+    #[serde(default = "default_outline_insert_kind")]
+    pub clipboard_insert_kind: String,
     #[serde(default)]
     pub tile_render_markdown: bool,
     #[serde(default)]
@@ -143,6 +147,8 @@ pub struct SaveNoteRequest {
     pub note_type: Option<NoteType>,
     #[serde(default)]
     pub outline_nodes: Option<Vec<OutlineNode>>,
+    #[serde(default)]
+    pub tags: Option<Vec<String>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -161,7 +167,7 @@ pub struct NoteMetadata {
     pub note_type: NoteType,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub outline_nodes: Option<Vec<OutlineNode>>,
-    // None identifies pre-tag metadata; Some([]) is a cached untagged note.
+    // None identifies legacy metadata; Some([]) explicitly stores no tags.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tags: Option<Vec<String>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -783,6 +789,8 @@ impl NoteStore {
         config.tile_line_height = normalize_tile_line_height(config.tile_line_height);
         config.tile_color_presets = normalize_tile_color_presets(&config.tile_color_presets);
         config.tile_background_transparency = config.tile_background_transparency.min(80);
+        config.timestamp_insert_kind = normalize_outline_insert_kind(&config.timestamp_insert_kind);
+        config.clipboard_insert_kind = normalize_outline_insert_kind(&config.clipboard_insert_kind);
         write_json_atomic(&path, &config)?;
         fs::create_dir_all(self.data_dir.join("notes"))?;
         if self.migrate_macos_shortcut_default(&mut config)? {
@@ -798,6 +806,8 @@ impl NoteStore {
         config.tile_line_height = normalize_tile_line_height(config.tile_line_height);
         config.tile_color_presets = normalize_tile_color_presets(&config.tile_color_presets);
         config.tile_background_transparency = config.tile_background_transparency.min(80);
+        config.timestamp_insert_kind = normalize_outline_insert_kind(&config.timestamp_insert_kind);
+        config.clipboard_insert_kind = normalize_outline_insert_kind(&config.clipboard_insert_kind);
         is_safe_data_dir(&self.data_dir)?;
         fs::create_dir_all(self.data_dir.join("notes"))?;
         write_json_atomic(&self.config_path(), &config)?;
@@ -806,20 +816,7 @@ impl NoteStore {
 
     pub fn list_notes(&self) -> Result<Vec<NoteMetadata>, AppError> {
         self.ensure_storage()?;
-        let mut metadata_file = self.load_metadata()?;
-        let mut backfilled = false;
-        for note in &mut metadata_file.notes {
-            if note.tags.is_none() {
-                let path = self.note_path_in_category(&note.file_name, &note.category);
-                if path.exists() {
-                    note.tags = Some(extract_tags(&fs::read_to_string(path)?));
-                    backfilled = true;
-                }
-            }
-        }
-        if backfilled {
-            self.save_metadata(&metadata_file)?;
-        }
+        let metadata_file = self.load_metadata()?;
         let mut metadata = metadata_file.notes;
         metadata.retain(|note| {
             self.note_path_in_category(&note.file_name, &note.category)
@@ -847,7 +844,7 @@ impl NoteStore {
             tile_accent_color: metadata.tile_accent_color,
             note_type: metadata.note_type,
             outline_nodes: metadata.outline_nodes,
-            tags: extract_tags(&content),
+            tags: metadata.tags.unwrap_or_default(),
             content,
         })
     }
@@ -875,7 +872,7 @@ impl NoteStore {
             preview: preview(&request.content),
             note_type: request.note_type.unwrap_or_default(),
             outline_nodes: request.outline_nodes.clone(),
-            tags: Some(extract_tags(&request.content)),
+            tags: Some(normalize_tags(request.tags.unwrap_or_default())),
             tile_color: None,
             tile_accent_color: None,
         };
@@ -944,7 +941,9 @@ impl NoteStore {
         note.updated_at = now;
         note.word_count = word_count;
         note.preview = preview(&request.content);
-        note.tags = Some(extract_tags(&request.content));
+        if let Some(tags) = request.tags {
+            note.tags = Some(normalize_tags(tags));
+        }
         note.note_type = request.note_type.unwrap_or_default();
         note.outline_nodes = request.outline_nodes;
 
@@ -1310,6 +1309,8 @@ impl NoteStore {
             tile_ctrl_close: default_tile_ctrl_close(),
             tile_double_click_to_edit: false,
             tile_save_returns_to_pin: false,
+            timestamp_insert_kind: default_outline_insert_kind(),
+            clipboard_insert_kind: default_outline_insert_kind(),
             tile_render_markdown: false,
             render_html_markdown: false,
             split_scroll_sync: true,
@@ -1495,6 +1496,13 @@ impl NoteStore {
             Ok(mut metadata) => {
                 let mut changed = false;
                 for note in &mut metadata.notes {
+                    if note.tags.is_none() {
+                        let note_path = self.note_path_in_category(&note.file_name, &note.category);
+                        if note_path.exists() {
+                            note.tags = Some(extract_tags(&fs::read_to_string(note_path)?));
+                            changed = true;
+                        }
+                    }
                     let accent = note
                         .tile_color
                         .as_deref()
@@ -1610,7 +1618,7 @@ impl NoteStore {
                 preview: preview(&content),
                 note_type: NoteType::Text,
                 outline_nodes: None,
-                tags: Some(extract_tags(&content)),
+                tags: Some(Vec::new()),
                 tile_color: None,
                 tile_accent_color: None,
             });
@@ -2034,6 +2042,18 @@ fn default_tile_line_height() -> f64 {
     1.8
 }
 
+fn default_outline_insert_kind() -> String {
+    "bullet".into()
+}
+
+fn normalize_outline_insert_kind(value: &str) -> String {
+    if value == "todo" {
+        "todo".into()
+    } else {
+        default_outline_insert_kind()
+    }
+}
+
 fn normalize_tile_line_height(value: f64) -> f64 {
     if value.is_finite() {
         value.clamp(1.0, 3.0)
@@ -2239,6 +2259,7 @@ mod tests {
             .create_note(SaveNoteRequest {
                 title: "Tagged".into(),
                 content: "# 标题\n正文 #工作 #读书 #工作".into(),
+                tags: Some(vec![" 工作 ".into(), "#读书".into(), "工作".into()]),
                 category: String::new(),
                 ..Default::default()
             })
@@ -2252,12 +2273,25 @@ mod tests {
             reloaded.read_note(&note.id).unwrap().tags,
             vec!["工作", "读书"]
         );
+        let preserved = reloaded
+            .update_note(
+                &note.id,
+                SaveNoteRequest {
+                    title: "Tagged".into(),
+                    content: "正文 #新标签".into(),
+                    category: "Work".into(),
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+        assert_eq!(preserved.tags, vec!["工作", "读书"]);
         let saved = reloaded
             .update_note(
                 &note.id,
                 SaveNoteRequest {
                     title: "Tagged".into(),
-                    content: "# 标题\n正文".into(),
+                    content: "# 标题\n正文 #工作".into(),
+                    tags: Some(vec![]),
                     category: "Work".into(),
                     ..Default::default()
                 },
@@ -2266,6 +2300,18 @@ mod tests {
         assert!(saved.tags.is_empty());
         assert_eq!(reloaded.list_notes().unwrap()[0].tags, Some(vec![]));
         assert!(reloaded.read_note(&note.id).unwrap().tags.is_empty());
+        let saved = reloaded
+            .update_note(
+                &note.id,
+                SaveNoteRequest {
+                    title: "Tagged".into(),
+                    content: "正文 #工作 #新的".into(),
+                    category: "Work".into(),
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+        assert!(saved.tags.is_empty());
     }
 
     #[test]
@@ -2287,6 +2333,7 @@ mod tests {
             .unwrap()
             .remove("tags");
         write_json_atomic(&store.metadata_path(), &old_metadata).unwrap();
+        assert_eq!(store.read_note(&note.id).unwrap().tags, vec!["旧标签"]);
         let listed = store.list_notes().unwrap();
         assert_eq!(listed[0].tags, Some(vec!["旧标签".into()]));
         assert_eq!(listed[0].updated_at, note.updated_at);
@@ -2296,18 +2343,44 @@ mod tests {
     }
 
     #[test]
-    fn imported_and_rebuilt_notes_extract_tags_without_rewriting_markdown() {
+    fn imported_and_rebuilt_notes_do_not_extract_tags_or_rewrite_markdown() {
         let store = test_store("tag-import-rebuild");
         let source = store.data_dir.join("source.md");
         let content = "# 标题\n正文 #导入\n`#代码`";
         fs::write(&source, content).unwrap();
         let note = store.import_markdown_file(&source, "").unwrap();
-        assert_eq!(note.tags, vec!["导入"]);
+        assert!(note.tags.is_empty());
         let exported = store.data_dir.join("exported.md");
         store.export_markdown_file(&note.id, &exported).unwrap();
         assert_eq!(fs::read_to_string(exported).unwrap(), content);
         let rebuilt = store.rebuild_metadata().unwrap();
-        assert_eq!(rebuilt.notes[0].tags, Some(vec!["导入".into()]));
+        assert_eq!(rebuilt.notes[0].tags, Some(vec![]));
+    }
+
+    #[test]
+    fn updating_legacy_metadata_preserves_old_tags_before_replacing_content() {
+        let store = test_store("tag-update-backfill");
+        let note = store
+            .create_note(SaveNoteRequest {
+                content: "正文 #旧标签".into(),
+                ..Default::default()
+            })
+            .unwrap();
+        let mut metadata: serde_json::Value =
+            serde_json::from_str(&fs::read_to_string(store.metadata_path()).unwrap()).unwrap();
+        metadata["notes"][0].as_object_mut().unwrap().remove("tags");
+        write_json_atomic(&store.metadata_path(), &metadata).unwrap();
+        let saved = store
+            .update_note(
+                &note.id,
+                SaveNoteRequest {
+                    content: "新正文 #新的".into(),
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+        assert_eq!(saved.tags, vec!["旧标签"]);
+        assert_eq!(store.read_note(&note.id).unwrap().tags, vec!["旧标签"]);
     }
 
     #[test]
@@ -2549,6 +2622,8 @@ mod tests {
             tile_ctrl_close: true,
             tile_double_click_to_edit: true,
             tile_save_returns_to_pin: true,
+            timestamp_insert_kind: "todo".into(),
+            clipboard_insert_kind: "bullet".into(),
             tile_render_markdown: false,
             render_html_markdown: false,
             split_scroll_sync: true,
@@ -2586,6 +2661,37 @@ mod tests {
         let persisted: AppConfig =
             serde_json::from_str(&fs::read_to_string(store.config_path()).unwrap()).unwrap();
         assert_eq!(persisted.tile_background_transparency, 80);
+    }
+
+    #[test]
+    fn quick_insert_config_normalizes_and_persists_kinds() {
+        let store = test_store("quick-insert-config");
+        let mut config = store.default_config();
+        assert_eq!(config.timestamp_insert_kind, "bullet");
+        assert_eq!(config.clipboard_insert_kind, "bullet");
+        config.timestamp_insert_kind = "todo".into();
+        config.clipboard_insert_kind = "todo".into();
+        store
+            .save_config(config.clone())
+            .expect("save todo defaults");
+        let loaded = store.load_config().expect("reload todo defaults");
+        assert_eq!(loaded.timestamp_insert_kind, "todo");
+        assert_eq!(loaded.clipboard_insert_kind, "todo");
+        config.timestamp_insert_kind = "unsupported".into();
+        let saved = store
+            .save_config(config.clone())
+            .expect("save invalid kind");
+        assert_eq!(saved.timestamp_insert_kind, "bullet");
+        assert_eq!(saved.clipboard_insert_kind, "todo");
+        config.clipboard_insert_kind = "invalid".into();
+        write_json_atomic(&store.config_path(), &config).expect("write invalid defaults");
+        let loaded = store.load_config().expect("normalize stored defaults");
+        assert_eq!(loaded.timestamp_insert_kind, "bullet");
+        assert_eq!(loaded.clipboard_insert_kind, "bullet");
+        let persisted: AppConfig =
+            serde_json::from_str(&fs::read_to_string(store.config_path()).unwrap()).unwrap();
+        assert_eq!(persisted.timestamp_insert_kind, "bullet");
+        assert_eq!(persisted.clipboard_insert_kind, "bullet");
     }
 
     #[test]
@@ -2701,6 +2807,8 @@ mod tests {
         assert_eq!(loaded.tile_color_presets, default_tile_color_presets());
         assert!(!loaded.tile_double_click_to_edit);
         assert!(!loaded.tile_save_returns_to_pin);
+        assert_eq!(loaded.timestamp_insert_kind, "bullet");
+        assert_eq!(loaded.clipboard_insert_kind, "bullet");
         assert_eq!(loaded.theme, "system");
         assert_eq!(loaded.locale, "zh-CN");
         assert_eq!(loaded.font_size, 14);

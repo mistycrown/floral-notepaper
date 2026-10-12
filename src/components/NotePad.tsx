@@ -14,6 +14,11 @@ import { toggleMarkdownTask } from "../features/markdown/taskLists";
 import { handleListEnter } from "../features/markdown/listContinuation";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
+import { readText } from "@tauri-apps/plugin-clipboard-manager";
+import { confirm } from "@tauri-apps/plugin-dialog";
+import { newOutlineNode } from "../features/notes/outline";
+import { newTimestampOutlineNode } from "../features/notes/outlineTimestamp";
+import { normalizeQuickInsertKind } from "../features/settings/quickInsertKind";
 import {
   animateCurrentWindowBounds,
   closeCurrentWindow,
@@ -59,13 +64,10 @@ import {
   tileSurfaceModeUnpinNoteId,
 } from "../features/windows/tileWindowEvents";
 import { NotepadOpenPanel } from "./NotepadOpenPanel";
-import { NoteTagHint } from "./NoteTags";
-import { TagAutocomplete } from "./TagAutocomplete";
-import { applyTextareaTagCompletion } from "../features/notes/tagCompletion";
 import { Tile } from "./Tile";
+import { getTextareaCaretPosition } from "./textareaCaret";
 import { NoteColorPicker } from "./NoteColorPicker";
 import { OutlineEditor, type OutlineEditorHandle } from "./OutlineEditor";
-import { NoteTypeSelect } from "./NoteTypeSelect";
 import { useOutlineNote } from "../features/notes/useOutlineNote";
 import { setTileEdgeHide } from "../features/windows/tileEdgeHide";
 import { useTileEdgeHide } from "../features/windows/useTileEdgeHide";
@@ -145,9 +147,11 @@ export function NotePad({
 }: NotePadProps) {
   const { t } = useTranslation();
   const [surfaceMode, setSurfaceMode] = useState<NoteSurfaceMode>(initialSurfaceMode);
+  const pinnedNoteIdRef = useRef(initialSurfaceMode === "tile" ? initialNoteId : undefined);
+  const returningToTileRef = useRef(false);
+  const draftSessionRef = useRef(0);
   const [mode, setMode] = useState<OpenMode>("new");
   const [notes, setNotes] = useState<NoteMetadata[]>([]);
-  const knownTags = useMemo(() => notes.flatMap((note) => note.tags ?? []), [notes]);
   const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
@@ -168,11 +172,20 @@ export function NotePad({
   );
   const [isExiting, setIsExiting] = useState(false);
   const [tileContentCopied, setTileContentCopied] = useState(false);
+  const [tileClipboardPending, setTileClipboardPending] = useState(false);
+  const tileClipboardPendingRef = useRef(false);
+  const tileClipboardMountedRef = useRef(true);
+  const [tileTimestampPending, setTileTimestampPending] = useState(false);
+  const tileTimestampPendingRef = useRef(false);
+  const pendingOutlineFocusRef = useRef<string | null>(null);
+  const quickInsertKindsRef = useRef({
+    timestamp: "bullet" as "bullet" | "todo",
+    clipboard: "bullet" as "bullet" | "todo",
+  });
   const [noteTileColor, setNoteTileColor] = useState<string | undefined>();
   const [noteTileAccentColor, setNoteTileAccentColor] = useState<string | undefined>();
   const [colorPickerOpen, setColorPickerOpen] = useState(false);
   const closeColorPicker = useCallback(() => setColorPickerOpen(false), []);
-  const titleRef = useRef<HTMLInputElement>(null);
   const contentRef = useRef<HTMLTextAreaElement>(null);
   const outlineEditorRef = useRef<OutlineEditorHandle>(null);
   const outline = useOutlineNote((value) => {
@@ -182,6 +195,15 @@ export function NotePad({
     setStatus("dirty");
   });
   const focusContent = useCallback(() => {
+    const active = document.activeElement;
+    if (
+      active === contentRef.current ||
+      (active instanceof HTMLTextAreaElement &&
+        outline.snapshot.current.outlineNodes.some(
+          (node) => node.id === active.dataset.outlineNode,
+        ))
+    )
+      return;
     if (outline.snapshot.current.noteType === "list") outlineEditorRef.current?.focus();
     else contentRef.current?.focus();
   }, [outline.snapshot]);
@@ -224,6 +246,13 @@ export function NotePad({
   );
   statusRef.current = status;
 
+  useEffect(() => {
+    tileClipboardMountedRef.current = true;
+    return () => {
+      tileClipboardMountedRef.current = false;
+    };
+  }, []);
+
   const refreshNotes = useCallback(async () => {
     // 池中休眠的窗口不拉取笔记列表，激活时会统一刷新
     if (dormantRef.current) return [] as NoteMetadata[];
@@ -234,6 +263,8 @@ export function NotePad({
 
   const applyNote = useCallback(
     (note: Note) => {
+      draftSessionRef.current += 1;
+      if (pinnedNoteIdRef.current !== note.id) pinnedNoteIdRef.current = undefined;
       noteSyncEpochRef.current += 1;
       setNoteTileColor(note.tileColor);
       setNoteTileAccentColor(note.tileAccentColor);
@@ -268,6 +299,10 @@ export function NotePad({
           setTileRenderMarkdown(loadedConfig.tileRenderMarkdown ?? false);
           setTileDoubleClickToEdit(loadedConfig.tileDoubleClickToEdit ?? false);
           setTileSaveReturnsToPin(loadedConfig.tileSaveReturnsToPin ?? false);
+          quickInsertKindsRef.current = {
+            timestamp: normalizeQuickInsertKind(loadedConfig.timestampInsertKind),
+            clipboard: normalizeQuickInsertKind(loadedConfig.clipboardInsertKind),
+          };
           setTileColorRaw(normalizeTileColor(loadedConfig.tileColor));
           setTileColorMode(loadedConfig.tileColorMode ?? "system");
           setTileColorPresets(normalizeTileColorPresets(loadedConfig.tileColorPresets));
@@ -395,6 +430,8 @@ export function NotePad({
       tileRenderMarkdown?: boolean;
       tileDoubleClickToEdit?: boolean;
       tileSaveReturnsToPin?: boolean;
+      timestampInsertKind?: "bullet" | "todo";
+      clipboardInsertKind?: "bullet" | "todo";
     }>("config-changed", (event) => {
       const mode = event.payload.tileColorMode ?? tileColorModeRef.current;
       const raw = event.payload.tileColor ?? tileColorRawRef.current;
@@ -415,6 +452,14 @@ export function NotePad({
         setTileRenderMarkdown(event.payload.tileRenderMarkdown);
       if (event.payload.tileDoubleClickToEdit != null)
         setTileDoubleClickToEdit(event.payload.tileDoubleClickToEdit);
+      if (event.payload.timestampInsertKind != null)
+        quickInsertKindsRef.current.timestamp = normalizeQuickInsertKind(
+          event.payload.timestampInsertKind,
+        );
+      if (event.payload.clipboardInsertKind != null)
+        quickInsertKindsRef.current.clipboard = normalizeQuickInsertKind(
+          event.payload.clipboardInsertKind,
+        );
       if (event.payload.tileSaveReturnsToPin != null)
         setTileSaveReturnsToPin(event.payload.tileSaveReturnsToPin);
     });
@@ -452,6 +497,8 @@ export function NotePad({
       hasEnteredOnce.current = true;
       noteSyncEpochRef.current += 1;
       editingNoteIdRef.current = null;
+      pinnedNoteIdRef.current = undefined;
+      draftSessionRef.current += 1;
       setEditingNoteId(null);
       setNoteTileColor(undefined);
       setNoteTileAccentColor(undefined);
@@ -599,6 +646,9 @@ export function NotePad({
       // Restore expanded native coordinates before reading or animating bounds.
       await setTileEdgeHide(false);
       const unpinnedNoteId = tileSurfaceModeUnpinNoteId(surfaceMode, nextMode, tileNoteId);
+      if (nextMode === "tile" || surfaceMode === "tile") {
+        pinnedNoteIdRef.current = editingNoteIdRef.current ?? initialNoteId;
+      }
       setSurfaceMode(nextMode);
       if (unpinnedNoteId) {
         void emitTileWindowUnpinned(unpinnedNoteId).catch(() => undefined);
@@ -617,7 +667,7 @@ export function NotePad({
         showToast(getErrorMessage(error));
       }
     },
-    [surfaceMode, tileNoteId],
+    [initialNoteId, surfaceMode, tileNoteId],
   );
 
   useEffect(() => {
@@ -669,10 +719,15 @@ export function NotePad({
     tileDragIntentRef.current = null;
   }, []);
 
+  const canReturnToTile =
+    surfaceMode === "pad" &&
+    mode === "new" &&
+    Boolean(editingNoteId && pinnedNoteIdRef.current === editingNoteId);
+
   useEffect(() => clearPendingTileDrag, [clearPendingTileDrag]);
 
   useEffect(() => {
-    if (surfaceMode !== "tile" || !tileDoubleClickToEdit) {
+    if (!(surfaceMode === "tile" && tileDoubleClickToEdit) && !canReturnToTile) {
       clearPendingTileDrag();
       return undefined;
     }
@@ -704,7 +759,7 @@ export function NotePad({
       window.removeEventListener("mousemove", handleMouseMove);
       window.removeEventListener("mouseup", handleMouseUp);
     };
-  }, [clearPendingTileDrag, surfaceMode, tileDoubleClickToEdit]);
+  }, [canReturnToTile, clearPendingTileDrag, surfaceMode, tileDoubleClickToEdit]);
 
   const handleTileDoubleClick = useCallback(
     (event: MouseEvent<HTMLElement>) => {
@@ -761,6 +816,50 @@ export function NotePad({
     }
   };
 
+  const handlePadDoubleClick = (event: MouseEvent<HTMLDivElement>) => {
+    if (!canReturnToTile || event.button !== 0 || returningToTileRef.current) return;
+    const target = event.target;
+    // The text editor fills the body, so its area below the last line is also
+    // whitespace. Mirror its wrapping and scroll position before accepting it.
+    const isBodyWhitespace =
+      target instanceof HTMLTextAreaElement &&
+      target === contentRef.current &&
+      (!target.value || event.clientY > getTextareaCaretPosition(target, target.value.length).y);
+    if (
+      !(target instanceof Element) ||
+      target.closest(
+        'button,input,select,a,[role="status"],[role="menu"],[role="listbox"],[data-outline-row],[data-surface-resize-handle="true"]',
+      ) ||
+      (target.closest("textarea") && !isBodyWhitespace) ||
+      (!isBodyWhitespace &&
+        Array.from(target.childNodes).some(
+          (node) => node.nodeType === Node.TEXT_NODE && Boolean(node.textContent?.trim()),
+        ))
+    ) {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+    clearPendingTileDrag();
+    returningToTileRef.current = true;
+    const noteId = editingNoteIdRef.current;
+    const session = draftSessionRef.current;
+    const returnToTile = async () => {
+      try {
+        await savePendingChanges();
+        if (editingNoteIdRef.current !== noteId || draftSessionRef.current !== session) return;
+        await switchSurfaceMode("tile");
+      } catch (error) {
+        setStatus("saveFailed");
+        showToast(getErrorMessage(error));
+      } finally {
+        returningToTileRef.current = false;
+      }
+    };
+    void returnToTile();
+  };
+
   const handleClose = useCallback(async () => {
     try {
       await savePendingChanges();
@@ -807,6 +906,97 @@ export function NotePad({
       showToast(getErrorMessage(error));
     }
   }, [content, t]);
+
+  const appendTileClipboard = useCallback(async () => {
+    if (tileClipboardPendingRef.current || outline.snapshot.current.noteType !== "list") return;
+    tileClipboardPendingRef.current = true;
+    setTileClipboardPending(true);
+    const noteId = editingNoteIdRef.current;
+    const isCurrentList = () =>
+      tileClipboardMountedRef.current &&
+      !dormantRef.current &&
+      editingNoteIdRef.current === noteId &&
+      outline.snapshot.current.noteType === "list";
+    try {
+      const text = (await readText()).replace(/\r\n?/g, "\n");
+      if (!isCurrentList()) return;
+      if (!text.trim()) {
+        showToast(
+          t("notepad.clipboard.empty", { defaultValue: "剪贴板中没有可追加的文字" }),
+          "info",
+        );
+        return;
+      }
+      const count = Array.from(text).length;
+      if (
+        count > 100 &&
+        !(await confirm(
+          t("notepad.clipboard.confirmLongText", {
+            count,
+            defaultValue:
+              "剪贴板中的文字有 {{count}} 字，超过 100 字，可能是误操作。仍要追加为一个条目吗？",
+          }),
+          {
+            title: t("notepad.clipboard.confirmTitle", { defaultValue: "确认追加条目" }),
+            kind: "warning",
+            okLabel: t("notepad.clipboard.append", { defaultValue: "追加" }),
+            cancelLabel: t("common.cancel", { defaultValue: "取消" }),
+          },
+        ))
+      )
+        return;
+      if (!isCurrentList()) return;
+      const node = { ...newOutlineNode(text), kind: quickInsertKindsRef.current.clipboard };
+      outline.changeNodes([...outline.snapshot.current.outlineNodes, node]);
+      await handleSaveRef.current({ isAutoSave: true });
+    } catch (error) {
+      showToast(getErrorMessage(error));
+    } finally {
+      tileClipboardPendingRef.current = false;
+      setTileClipboardPending(false);
+    }
+  }, [outline.changeNodes, outline.snapshot, t]);
+
+  const appendTileTimestamp = useCallback(async () => {
+    if (
+      tileTimestampPendingRef.current ||
+      tileClipboardPendingRef.current ||
+      outline.snapshot.current.noteType !== "list"
+    )
+      return;
+    tileTimestampPendingRef.current = true;
+    setTileTimestampPending(true);
+    const noteId = editingNoteIdRef.current;
+    const session = draftSessionRef.current;
+    const node = newTimestampOutlineNode();
+    try {
+      setMode("new");
+      await switchSurfaceMode("pad");
+      if (
+        !tileClipboardMountedRef.current ||
+        dormantRef.current ||
+        editingNoteIdRef.current !== noteId ||
+        draftSessionRef.current !== session ||
+        outline.snapshot.current.noteType !== "list"
+      )
+        return;
+      pendingOutlineFocusRef.current = node.id;
+      node.kind = quickInsertKindsRef.current.timestamp;
+      outline.changeNodes([...outline.snapshot.current.outlineNodes, node]);
+    } catch (error) {
+      showToast(getErrorMessage(error));
+    } finally {
+      tileTimestampPendingRef.current = false;
+      setTileTimestampPending(false);
+    }
+  }, [outline.changeNodes, outline.snapshot, switchSurfaceMode]);
+
+  useEffect(() => {
+    const id = pendingOutlineFocusRef.current;
+    if (surfaceMode !== "pad" || !id || !outline.nodes.some((node) => node.id === id)) return;
+    outlineEditorRef.current?.focusNode(id);
+    pendingOutlineFocusRef.current = null;
+  }, [surfaceMode, outline.nodes]);
 
   useEffect(() => {
     if (!tileContentCopied) return;
@@ -903,7 +1093,7 @@ export function NotePad({
     const target = event.target as HTMLElement;
     if (target.closest("button,input,textarea,select,a,[data-note-selectable]")) return;
 
-    if (surfaceMode === "tile" && tileDoubleClickToEdit) {
+    if ((surfaceMode === "tile" && tileDoubleClickToEdit) || canReturnToTile) {
       if (event.button !== 0 || event.detail > 1) return;
       clearPendingTileDrag();
       tileDragIntentRef.current = {
@@ -984,20 +1174,27 @@ export function NotePad({
           <button
             type="button"
             aria-label={
-              tileContentCopied
-                ? statusLabel.copied
-                : t("contextMenu.tile.copy", { defaultValue: "复制" })
+              outline.noteType === "list"
+                ? t("notepad.clipboard.appendTooltip", { defaultValue: "从剪贴板追加条目" })
+                : tileContentCopied
+                  ? statusLabel.copied
+                  : t("contextMenu.tile.copy", { defaultValue: "复制" })
             }
             title={
-              tileContentCopied
-                ? statusLabel.copied
-                : t("contextMenu.tile.copy", { defaultValue: "复制" })
+              outline.noteType === "list"
+                ? t("notepad.clipboard.appendTooltip", { defaultValue: "从剪贴板追加条目" })
+                : tileContentCopied
+                  ? statusLabel.copied
+                  : t("contextMenu.tile.copy", { defaultValue: "复制" })
             }
             onMouseDown={(event) => event.stopPropagation()}
             onDoubleClick={(event) => event.stopPropagation()}
-            onClick={() => void copyTileContent()}
-            className={`absolute bottom-2 right-2 z-10 w-7 h-7 flex items-center justify-center rounded-lg bg-cloud/80 transition-colors cursor-pointer ${
-              tileContentCopied
+            onClick={() =>
+              void (outline.noteType === "list" ? appendTileClipboard() : copyTileContent())
+            }
+            disabled={outline.noteType === "list" && (tileClipboardPending || tileTimestampPending)}
+            className={`absolute bottom-2 right-2 z-10 w-7 h-7 flex items-center justify-center rounded-lg bg-cloud/80 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-wait ${
+              outline.noteType !== "list" && tileContentCopied
                 ? "text-bamboo"
                 : "text-ink-ghost hover:text-bamboo hover:bg-bamboo-mist/80"
             }`}
@@ -1013,7 +1210,12 @@ export function NotePad({
               strokeLinecap="round"
               strokeLinejoin="round"
             >
-              {tileContentCopied ? (
+              {outline.noteType === "list" ? (
+                <>
+                  <rect x="7" y="2" width="10" height="4" rx="1" />
+                  <path d="M17 4h2a2 2 0 0 1 2 2v6M7 4H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h7M18 14v8M14 18h8" />
+                </>
+              ) : tileContentCopied ? (
                 <path d="m5 12 4 4L19 6" />
               ) : (
                 <>
@@ -1023,6 +1225,32 @@ export function NotePad({
               )}
             </svg>
           </button>
+          {outline.noteType === "list" && (
+            <button
+              type="button"
+              aria-label={t("notepad.timestamp.add", { defaultValue: "新建时间记录" })}
+              title={t("notepad.timestamp.add", { defaultValue: "新建时间记录" })}
+              onMouseDown={(event) => event.stopPropagation()}
+              onDoubleClick={(event) => event.stopPropagation()}
+              onClick={() => void appendTileTimestamp()}
+              disabled={tileClipboardPending || tileTimestampPending}
+              className="absolute bottom-2 right-11 z-10 w-7 h-7 flex items-center justify-center rounded-lg bg-cloud/80 text-ink-ghost hover:text-bamboo hover:bg-bamboo-mist/80 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-wait"
+            >
+              <svg
+                aria-hidden="true"
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <path d="M12 3a9 9 0 1 0 0 18M12 7v5l3 2M19 3v6M16 6h6" />
+              </svg>
+            </button>
+          )}
           <SurfaceResizeHandles />
         </Tile>
       ) : (
@@ -1031,25 +1259,27 @@ export function NotePad({
           data-surface-mode={surfaceMode}
           data-context-menu="pad"
           data-pad-mode={mode}
+          onDoubleClick={handlePadDoubleClick}
         >
           <>
             <div
-              className="flex items-center justify-between px-4 pt-1 pb-0 cursor-default shrink-0"
+              className="flex items-center justify-between gap-2 min-w-0 px-4 pt-1 pb-0 cursor-default shrink-0"
               onMouseDown={handleDrag}
             >
-              <span
-                role="status"
-                aria-live="polite"
-                className="text-[10px] text-ink-ghost truncate"
-              >
+              <span role="status" aria-live="polite" className="sr-only">
                 {statusLabel[status]}
               </span>
 
-              <div className="ml-auto flex items-center gap-1.5">
-                <NoteTypeSelect
-                  value={outline.noteType}
-                  onChange={(type) => outline.changeType(type, content)}
-                />
+              <span
+                data-pad-note-title="true"
+                data-note-selectable="true"
+                title={title.trim() || t("common.untitledNote", { defaultValue: "无标题笔记" })}
+                className="min-w-0 flex-1 truncate text-[11px] font-display text-ink-soft select-text"
+              >
+                {title.trim() || t("common.untitledNote", { defaultValue: "无标题笔记" })}
+              </span>
+
+              <div className="ml-auto shrink-0 flex items-center gap-1.5">
                 <button
                   onClick={() => void handlePin()}
                   className="group w-7 h-7 flex items-center justify-center rounded-lg transition-all duration-200 cursor-pointer text-ink-ghost hover:text-ink-faint hover:bg-paper-warm"
@@ -1095,49 +1325,19 @@ export function NotePad({
             {mode === "new" ? (
               <div
                 data-pad-editor-body="true"
-                className="px-4 pt-3 pb-2 flex flex-col flex-1 min-h-0"
+                className="px-4 pt-2 pb-2 flex flex-col flex-1 min-h-0"
               >
-                <input
-                  ref={titleRef}
-                  type="text"
-                  value={title}
-                  onChange={(event) => {
-                    setTitle(event.target.value);
-                    setStatus("dirty");
-                  }}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter" || event.key === "ArrowDown") {
-                      event.preventDefault();
-                      if (outline.noteType === "list") outlineEditorRef.current?.focus();
-                      else contentRef.current?.focus();
-                    }
-                  }}
-                  placeholder={t("notepad.placeholder.title", { defaultValue: "标题（可选）" })}
-                  className="w-full font-display font-medium text-ink placeholder:text-ink-ghost/60 mb-2 tracking-wide shrink-0"
-                  style={{ fontSize: `${surfaceFontSize}px` }}
-                />
-
                 {outline.noteType === "list" ? (
                   <div className="flex-1 min-h-0 overflow-y-auto pb-2">
                     <OutlineEditor
                       ref={outlineEditorRef}
                       nodes={outline.nodes}
-                      tags={knownTags}
                       onChange={outline.changeNodes}
                       fontSize={surfaceFontSize}
                     />
                   </div>
                 ) : (
-                  <TagAutocomplete
-                    tags={knownTags}
-                    className="flex flex-col flex-1 min-h-0"
-                    onComplete={(textarea, edit) =>
-                      applyTextareaTagCompletion(textarea, edit, (value) => {
-                        setContent(value);
-                        setStatus("dirty");
-                      })
-                    }
-                  >
+                  <div className="flex flex-col flex-1 min-h-0">
                     <textarea
                       ref={contentRef}
                       data-tab-indent="true"
@@ -1149,19 +1349,9 @@ export function NotePad({
                       onPaste={imagePasteHandler}
                       onDrop={imageDropHandler}
                       onDragOver={imageDragOverHandler}
-                      onKeyDown={(event) => {
-                        if (handleListEnter(event, setContent, () => setStatus("dirty"))) return;
-                        if (event.key === "ArrowUp") {
-                          const ta = contentRef.current;
-                          if (ta && ta.selectionStart === ta.selectionEnd) {
-                            const textBeforeCursor = content.slice(0, ta.selectionStart);
-                            if (!textBeforeCursor.includes("\n")) {
-                              event.preventDefault();
-                              titleRef.current?.focus();
-                            }
-                          }
-                        }
-                      }}
+                      onKeyDown={(event) =>
+                        handleListEnter(event, setContent, () => setStatus("dirty"))
+                      }
                       placeholder={t("notepad.placeholder.content", { defaultValue: "写点什么……" })}
                       className="w-full flex-1 min-h-0 pb-2 leading-relaxed text-ink-soft font-body placeholder:text-ink-ghost/50"
                       style={{
@@ -1169,9 +1359,8 @@ export function NotePad({
                         tabSize: `var(--tab-indent-size, 2)`,
                       }}
                     />
-                  </TagAutocomplete>
+                  </div>
                 )}
-                <NoteTagHint content={content} />
               </div>
             ) : (
               <NotepadOpenPanel

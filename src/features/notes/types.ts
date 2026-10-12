@@ -35,6 +35,7 @@ export interface SaveNoteRequest {
   category: string;
   noteType?: NoteType;
   outlineNodes?: OutlineNode[];
+  tags?: string[];
 }
 
 export interface ExternalFile {

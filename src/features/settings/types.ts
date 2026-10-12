@@ -30,6 +30,8 @@ export interface AppConfig {
   tileCtrlClose: boolean;
   tileDoubleClickToEdit: boolean;
   tileSaveReturnsToPin: boolean;
+  timestampInsertKind?: "bullet" | "todo";
+  clipboardInsertKind?: "bullet" | "todo";
   tileRenderMarkdown: boolean;
   renderHtmlMarkdown: boolean;
   splitScrollSync: boolean;
